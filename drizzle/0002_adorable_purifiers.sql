@@ -1,0 +1,1 @@
+ALTER TABLE `sph_documents` ADD `static_snapshot_json` text;
