@@ -121,6 +121,17 @@ function isInvoiceCancelled(status: string) {
   return status === "cancelled";
 }
 
+function normalizedSphStatus(status: string) {
+  const aliases: Record<string, string> = {
+    cancelled: "cancel",
+    draft: "cek_harga",
+    invoiced: "menunggu_pengiriman",
+    pending_invoice: "menunggu_pengiriman",
+  };
+
+  return aliases[status] ?? status;
+}
+
 function isSupplierNoteCancelled(status: string) {
   return status === "CANCELLED";
 }
@@ -184,6 +195,7 @@ async function getDashboardData() {
           customerName: invoiceDocuments.customerName,
           invoiceDate: invoiceDocuments.invoiceDate,
           invoiceNo: invoiceDocuments.invoiceNo,
+          paidAmount: invoiceDocuments.paidAmount,
           paymentDueDate: invoiceDocuments.paymentDueDate,
           sphId: invoiceDocuments.sphId,
           status: invoiceDocuments.status,
@@ -251,16 +263,18 @@ async function getDashboardData() {
     (invoice) => !isInvoicePaid(invoice.status) && !isInvoiceCancelled(invoice.status)
   );
   const unpaidAmount = unpaidInvoices.reduce(
-    (sum, invoice) => sum + invoice.totalAmount,
+    (sum, invoice) => sum + Math.max(invoice.totalAmount - invoice.paidAmount, 0),
     0
   );
   const overdueInvoices = unpaidInvoices.filter(
     (invoice) => dateKey(invoice.paymentDueDate) && dateKey(invoice.paymentDueDate) < today
   );
   const activeSph = sphRows.filter(
-    (sph) => sph.status !== "cancelled" && sph.status !== "invoiced"
+    (sph) => !["cancel", "selesai"].includes(normalizedSphStatus(sph.status))
   );
-  const followUpSph = sphRows.filter((sph) => sph.status === "pending_invoice");
+  const followUpSph = sphRows.filter(
+    (sph) => normalizedSphStatus(sph.status) === "cek_harga"
+  );
   const pendingShipments = shipmentRows.filter(
     (shipment) => !isShipmentFinal(shipment.latestStatus)
   );

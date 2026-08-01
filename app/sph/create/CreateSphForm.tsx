@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmForm } from "../../components/ConfirmForm";
 
 type CustomerOption = {
   id: string;
@@ -74,7 +75,13 @@ export function CreateSphForm({
   }
 
   return (
-    <form action={action} className="sph-form">
+    <ConfirmForm
+      action={action}
+      className="sph-form"
+      confirmMessage={
+        initialValues ? "Simpan perubahan SPH ini?" : "Buat SPH baru dengan data ini?"
+      }
+    >
       {initialValues ? <input name="sphId" type="hidden" value={initialValues.sphId ?? ""} /> : null}
       <section className="form-section">
         <div className="section-heading">
@@ -241,6 +248,6 @@ export function CreateSphForm({
           </table>
         </div>
       </section>
-    </form>
+    </ConfirmForm>
   );
 }

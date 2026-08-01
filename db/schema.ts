@@ -59,10 +59,16 @@ export const sphDocuments = sqliteTable(
       mode: "json",
     }).$type<Record<string, unknown>>(),
     status: text("status", {
-      enum: ["draft", "pending_invoice", "invoiced", "cancelled"],
+      enum: [
+        "cek_harga",
+        "menunggu_pengiriman",
+        "proses_pengiriman",
+        "selesai",
+        "cancel",
+      ],
     })
       .notNull()
-      .default("draft"),
+      .default("cek_harga"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -122,6 +128,10 @@ export const shipmentJourneys = sqliteTable(
     isShippingPaid: integer("is_shipping_paid", { mode: "boolean" })
       .notNull()
       .default(false),
+    customerReceived: integer("customer_received", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    customerReceivedAt: text("customer_received_at"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -215,9 +225,31 @@ export const invoiceDocuments = sqliteTable(
     modalAmount: integer("modal_amount").notNull().default(0),
     feeAmount: integer("fee_amount").notNull().default(0),
     kodAmount: integer("kod_amount").notNull().default(0),
+    paidAmount: integer("paid_amount").notNull().default(0),
     amountInWords: text("amount_in_words").notNull().default(""),
     pdfFileId: text("pdf_file_id"),
     pdfUrl: text("pdf_url"),
+    ttdMateraiFileName: text("ttd_materai_file_name").notNull().default(""),
+    ttdMateraiFileMimeType: text("ttd_materai_file_mime_type")
+      .notNull()
+      .default(""),
+    ttdMateraiFileSize: integer("ttd_materai_file_size").notNull().default(0),
+    ttdMateraiFileBase64: text("ttd_materai_file_base64").notNull().default(""),
+    ttdMateraiFileSha256: text("ttd_materai_file_sha256").notNull().default(""),
+    paymentProofFilesJson: text("invoice_payment_proof_files_json", {
+      mode: "json",
+    })
+      .$type<
+        {
+          name: string;
+          mimeType: string;
+          size: number;
+          base64: string;
+          sha256: string;
+        }[]
+      >()
+      .notNull()
+      .default(sql`'[]'`),
     ledgerRow: integer("ledger_row"),
     status: text("status", {
       enum: ["draft", "pending", "pending_replace", "done", "cancelled"],

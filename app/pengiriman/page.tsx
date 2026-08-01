@@ -10,11 +10,14 @@ export const dynamic = "force-dynamic";
 type SphItemRow = {
   id: string;
   sphId: string;
+  quantity: number;
 };
 
 type JourneyRow = {
   sphItemId: string;
   latestStatus: string;
+  quantity: number;
+  customerReceived: boolean;
 };
 
 function getSearchParam(
@@ -61,6 +64,17 @@ function isShipmentFinal(status: string) {
   ].includes(normalized);
 }
 
+function normalizedSphStatus(status: string) {
+  const aliases: Record<string, string> = {
+    cancelled: "cancel",
+    draft: "cek_harga",
+    invoiced: "menunggu_pengiriman",
+    pending_invoice: "menunggu_pengiriman",
+  };
+
+  return aliases[status] ?? status;
+}
+
 export default async function PengirimanPage({
   searchParams,
 }: {
@@ -92,6 +106,7 @@ export default async function PengirimanPage({
           .select({
             id: sphItems.id,
             sphId: sphItems.sphId,
+            quantity: sphItems.quantity,
           })
           .from(sphItems)
           .where(inArray(sphItems.sphId, documentIds))
@@ -104,20 +119,22 @@ export default async function PengirimanPage({
           .select({
             sphItemId: shipmentJourneys.sphItemId,
             latestStatus: shipmentJourneys.latestStatus,
+            quantity: shipmentJourneys.quantity,
+            customerReceived: shipmentJourneys.customerReceived,
           })
           .from(shipmentJourneys)
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
 
-  const itemCountBySph = new Map<string, number>();
+  const itemQtyBySph = new Map<string, number>();
   const sphIdByItem = new Map<string, string>();
 
   for (const item of itemRows) {
     sphIdByItem.set(item.id, item.sphId);
-    itemCountBySph.set(item.sphId, (itemCountBySph.get(item.sphId) ?? 0) + 1);
+    itemQtyBySph.set(item.sphId, (itemQtyBySph.get(item.sphId) ?? 0) + item.quantity);
   }
 
-  const updatedCountBySph = new Map<string, number>();
+  const receivedQtyBySph = new Map<string, number>();
   const latestStatusBySph = new Map<string, string>();
 
   for (const journey of journeyRows) {
@@ -127,18 +144,26 @@ export default async function PengirimanPage({
       continue;
     }
 
+    if (journey.customerReceived) {
+      receivedQtyBySph.set(
+        sphId,
+        (receivedQtyBySph.get(sphId) ?? 0) + journey.quantity
+      );
+    }
+
     if (journey.latestStatus.trim()) {
-      updatedCountBySph.set(sphId, (updatedCountBySph.get(sphId) ?? 0) + 1);
       latestStatusBySph.set(sphId, journey.latestStatus.trim());
     }
   }
 
   const filteredDocuments = documents.filter((document) => {
-    const itemCount = itemCountBySph.get(document.id) ?? 0;
-    const updatedCount = updatedCountBySph.get(document.id) ?? 0;
+    const sphStatus = normalizedSphStatus(document.status);
+    const totalQty = itemQtyBySph.get(document.id) ?? 0;
+    const receivedQty = receivedQtyBySph.get(document.id) ?? 0;
     const latestStatus = latestStatusBySph.get(document.id) || "";
     const isPending =
-      itemCount === 0 || updatedCount < itemCount || !isShipmentFinal(latestStatus);
+      sphStatus !== "selesai" &&
+      (totalQty === 0 || receivedQty < totalQty || !isShipmentFinal(latestStatus));
     const matchesQuery =
       !query ||
       [
@@ -152,7 +177,11 @@ export default async function PengirimanPage({
       !statusFilter ||
       (statusFilter === "pending" ? isPending : !isPending);
 
-    return matchesQuery && matchesStatus;
+    return (
+      !["cek_harga", "cancel"].includes(sphStatus) &&
+      matchesQuery &&
+      matchesStatus
+    );
   });
   const { pageRows, safePage } = paginateRows(
     filteredDocuments,
@@ -208,8 +237,8 @@ export default async function PengirimanPage({
             <tbody>
               {pageRows.length > 0 ? (
                 pageRows.map((document) => {
-                  const itemCount = itemCountBySph.get(document.id) ?? 0;
-                  const updatedCount = updatedCountBySph.get(document.id) ?? 0;
+                  const totalQty = itemQtyBySph.get(document.id) ?? 0;
+                  const receivedQty = receivedQtyBySph.get(document.id) ?? 0;
 
                   return (
                     <tr key={document.id}>
@@ -231,7 +260,7 @@ export default async function PengirimanPage({
                       </td>
                       <td>
                         <span className="journey-progress">
-                          {updatedCount}/{itemCount} item
+                          {receivedQty}/{totalQty} qty
                         </span>
                       </td>
                       <td>{latestStatusBySph.get(document.id) || "-"}</td>

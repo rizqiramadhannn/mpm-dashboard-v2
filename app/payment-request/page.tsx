@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "../components/AppShell";
+import { ConfirmForm } from "../components/ConfirmForm";
 import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
 import {
   createPaymentRequestAction,
@@ -100,7 +101,11 @@ export default async function PaymentRequestPage({
           </a>
         </div>
 
-        <form action={createPaymentRequestAction} className="payment-request-form">
+        <ConfirmForm
+          action={createPaymentRequestAction}
+          className="payment-request-form"
+          confirmMessage="Tambah payment request dengan data ini?"
+        >
           <label>
             <span>Tanggal</span>
             <input name="requestDate" required type="date" defaultValue={todayKey()} />
@@ -130,7 +135,7 @@ export default async function PaymentRequestPage({
             <input name="status" placeholder="Optional" />
           </label>
           <button type="submit">Tambah Item</button>
-        </form>
+        </ConfirmForm>
 
         <form className="table-filter-bar">
           <label>
@@ -195,7 +200,10 @@ export default async function PaymentRequestPage({
                     <td>{row.description}</td>
                     <td>{row.transactionPurpose}</td>
                     <td>
-                      <form action={updatePaymentRequestStatusAction}>
+                      <ConfirmForm
+                        action={updatePaymentRequestStatusAction}
+                        confirmMessage={`Simpan status payment request ${row.description}?`}
+                      >
                         <input name="id" type="hidden" value={row.id} />
                         <input
                           aria-label={`Status ${row.description}`}
@@ -207,7 +215,7 @@ export default async function PaymentRequestPage({
                         <button className="inline-save-button" type="submit">
                           Save
                         </button>
-                      </form>
+                      </ConfirmForm>
                     </td>
                   </tr>
                 ))

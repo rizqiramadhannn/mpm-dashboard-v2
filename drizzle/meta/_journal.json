@@ -78,6 +78,20 @@
       "when": 1785522600000,
       "tag": "0010_normalize_invoice_numbers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785589200000,
+      "tag": "0015_sph_status_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785589800000,
+      "tag": "0016_invoice_payment_files",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "../../components/AppShell";
+import { ConfirmForm } from "../../components/ConfirmForm";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { listAssets, updateAssetTrackingAction } from "../data";
 
@@ -166,7 +167,11 @@ export default async function AssetListPage({
                     <td>{formatDate(asset.acquisitionDate)}</td>
                     <td>{asset.notes || "-"}</td>
                     <td>
-                      <form action={updateAssetTrackingAction} className="asset-inline-form">
+                      <ConfirmForm
+                        action={updateAssetTrackingAction}
+                        className="asset-inline-form"
+                        confirmMessage={`Simpan perubahan tracking asset ${asset.assetCode}?`}
+                      >
                         <input name="id" type="hidden" value={asset.id} />
                         <input
                           aria-label={`PIC ${asset.assetCode}`}
@@ -199,7 +204,7 @@ export default async function AssetListPage({
                           defaultValue={asset.notes}
                         />
                         <button type="submit">Save</button>
-                      </form>
+                      </ConfirmForm>
                     </td>
                   </tr>
                 ))

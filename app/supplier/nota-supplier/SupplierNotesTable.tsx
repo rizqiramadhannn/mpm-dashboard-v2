@@ -171,6 +171,11 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
       return;
     }
 
+    if (!window.confirm(`Simpan nominal terbayar untuk ${note.noteNo}?`)) {
+      setEditing(null);
+      return;
+    }
+
     setSavingId(note.id);
 
     try {
@@ -211,6 +216,16 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
     files: FileList | null
   ) {
     if (!files || files.length === 0) {
+      return;
+    }
+
+    if (
+      !window.confirm(
+        type === "invoice"
+          ? `Upload invoice untuk ${note.noteNo}?`
+          : `Upload bukti bayar untuk ${note.noteNo}?`
+      )
+    ) {
       return;
     }
 

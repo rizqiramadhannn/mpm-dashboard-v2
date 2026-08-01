@@ -2,13 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { getDb } from "../../../db";
-import {
-  customers,
-  invoiceDocuments,
-  invoiceItems,
-  sphDocuments,
-  sphItems,
-} from "../../../db/schema";
+import { customers, sphDocuments, sphItems } from "../../../db/schema";
 import { listCustomers } from "../../customer/data";
 import { CreateSphForm } from "./CreateSphForm";
 
@@ -183,10 +177,6 @@ function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
   return sphDate;
 }
 
-function invoiceNoFromSph(sphNo: string) {
-  return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
-}
-
 async function createSphAction(formData: FormData) {
   "use server";
 
@@ -280,58 +270,19 @@ async function createSphAction(formData: FormData) {
       totalAmount,
       amountInWords: toRupiahWords(totalAmount),
       staticSnapshotJson: staticSphSnapshot,
-      status: "pending_invoice",
+      status: "cek_harga",
     })
     .returning({ id: sphDocuments.id });
 
-  const insertedItems = await db
-    .insert(sphItems)
-    .values(
-      items.map((item) => ({
-        sphId: insertedSph[0].id,
-        lineNo: item.lineNo,
-        partNumber: item.partNumber,
-        partName: item.partName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-      }))
-    )
-    .returning({
-      id: sphItems.id,
-      lineNo: sphItems.lineNo,
-    });
-  const sphItemIdByLine = new Map(insertedItems.map((item) => [item.lineNo, item.id]));
-
-  const insertedInvoice = await db
-    .insert(invoiceDocuments)
-    .values({
-      amountInWords: toRupiahWords(totalAmount),
-      customerDetailLine1: customer.detailLine1,
-      customerDetailLine2: customer.detailLine2,
-      customerDetailLine3: customer.detailLine3,
-      customerName: customer.name,
-      franco,
-      invoiceDate: sphDate,
-      invoiceNo: invoiceNoFromSph(sphNo),
-      paymentDueDate,
-      paymentTerm,
-      sphId: insertedSph[0].id,
-      status: "pending",
-      totalAmount,
-    })
-    .returning({ id: invoiceDocuments.id });
-
-  await db.insert(invoiceItems).values(
+  await db.insert(sphItems).values(
     items.map((item) => ({
-      invoiceId: insertedInvoice[0].id,
+      sphId: insertedSph[0].id,
       lineNo: item.lineNo,
-      partName: item.partName,
       partNumber: item.partNumber,
+      partName: item.partName,
       quantity: item.quantity,
-      sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
-      totalPrice: item.totalPrice,
       unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
     }))
   );
 

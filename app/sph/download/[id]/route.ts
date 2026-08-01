@@ -395,6 +395,7 @@ export async function GET(
       totalAmount: sphDocuments.totalAmount,
       amountInWords: sphDocuments.amountInWords,
       staticSnapshotJson: sphDocuments.staticSnapshotJson,
+      status: sphDocuments.status,
     })
     .from(sphDocuments)
     .where(eq(sphDocuments.id, id))
@@ -402,6 +403,12 @@ export async function GET(
 
   if (!document) {
     return new Response("SPH tidak ditemukan.", { status: 404 });
+  }
+
+  if (["cek_harga", "draft"].includes(document.status)) {
+    return new Response("SPH masih Cek Harga dan belum bisa didownload.", {
+      status: 403,
+    });
   }
 
   const items = await db

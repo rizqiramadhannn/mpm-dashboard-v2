@@ -2,6 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { AppShell } from "../../components/AppShell";
+import { ConfirmForm } from "../../components/ConfirmForm";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { getDb } from "../../../db";
@@ -19,6 +20,18 @@ type SphItemRow = {
   unitPrice: number;
   totalPrice: number;
 };
+
+const sphStatuses = [
+  "cek_harga",
+  "menunggu_pengiriman",
+  "proses_pengiriman",
+  "selesai",
+  "cancel",
+];
+
+function invoiceNoFromSph(sphNo: string) {
+  return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
+}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -48,13 +61,29 @@ function formatRupiah(value: number) {
 
 function statusLabel(status: string) {
   const labels: Record<string, string> = {
-    cancelled: "Cancelled",
-    draft: "Draft",
-    invoiced: "Invoiced",
-    pending_invoice: "Pending Invoice",
+    cancel: "Cancel",
+    cancelled: "Cancel",
+    cek_harga: "Cek Harga",
+    draft: "Cek Harga",
+    invoiced: "Menunggu Pengiriman",
+    menunggu_pengiriman: "Menunggu Pengiriman",
+    pending_invoice: "Menunggu Pengiriman",
+    proses_pengiriman: "Proses Pengiriman",
+    selesai: "Selesai",
   };
 
   return labels[status] ?? status;
+}
+
+function normalizedStatus(status: string) {
+  const aliases: Record<string, string> = {
+    cancelled: "cancel",
+    draft: "cek_harga",
+    invoiced: "menunggu_pengiriman",
+    pending_invoice: "menunggu_pengiriman",
+  };
+
+  return aliases[status] ?? status;
 }
 
 function textMatches(value: unknown, query: string) {
@@ -148,6 +177,20 @@ function CancelIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="m20 6-11 11-5-5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 async function deleteSphAction(formData: FormData) {
   "use server";
 
@@ -187,10 +230,140 @@ async function cancelSphAction(formData: FormData) {
 
   const sphId = idValue.trim();
   const db = await getDb();
+  const invoices = await db
+    .select({ id: invoiceDocuments.id })
+    .from(invoiceDocuments)
+    .where(eq(invoiceDocuments.sphId, sphId));
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+
+  if (invoiceIds.length > 0) {
+    await db.delete(invoiceItems).where(inArray(invoiceItems.invoiceId, invoiceIds));
+    await db.delete(invoiceDocuments).where(inArray(invoiceDocuments.id, invoiceIds));
+  }
+
   await db
     .update(sphDocuments)
-    .set({ status: "cancelled" })
+    .set({ status: "cancel" })
     .where(eq(sphDocuments.id, sphId));
+  revalidatePath("/dashboard");
+  revalidatePath("/invoice");
+  revalidatePath("/sph/list");
+}
+
+async function approveHargaAction(formData: FormData) {
+  "use server";
+
+  const idValue = formData.get("sphId");
+
+  if (typeof idValue !== "string" || idValue.trim() === "") {
+    throw new Error("SPH tidak valid.");
+  }
+
+  const sphId = idValue.trim();
+  const db = await getDb();
+  const [document] = await db
+    .select({
+      amountInWords: sphDocuments.amountInWords,
+      customerDetailLine1: sphDocuments.customerDetailLine1,
+      customerDetailLine2: sphDocuments.customerDetailLine2,
+      customerDetailLine3: sphDocuments.customerDetailLine3,
+      customerName: sphDocuments.customerName,
+      franco: sphDocuments.franco,
+      id: sphDocuments.id,
+      paymentDueDate: sphDocuments.paymentDueDate,
+      paymentTerm: sphDocuments.paymentTerm,
+      sphDate: sphDocuments.sphDate,
+      sphNo: sphDocuments.sphNo,
+      status: sphDocuments.status,
+      totalAmount: sphDocuments.totalAmount,
+    })
+    .from(sphDocuments)
+    .where(eq(sphDocuments.id, sphId))
+    .limit(1);
+
+  if (!document) {
+    throw new Error("SPH tidak ditemukan.");
+  }
+
+  if (normalizedStatus(document.status) === "cancel") {
+    throw new Error("SPH cancel tidak bisa di-approve.");
+  }
+
+  const items = await db
+    .select({
+      id: sphItems.id,
+      lineNo: sphItems.lineNo,
+      partName: sphItems.partName,
+      partNumber: sphItems.partNumber,
+      quantity: sphItems.quantity,
+      totalPrice: sphItems.totalPrice,
+      unitPrice: sphItems.unitPrice,
+    })
+    .from(sphItems)
+    .where(eq(sphItems.sphId, sphId));
+
+  if (items.length === 0) {
+    throw new Error("SPH belum memiliki item.");
+  }
+
+  const [existingInvoice] = await db
+    .select({ id: invoiceDocuments.id })
+    .from(invoiceDocuments)
+    .where(eq(invoiceDocuments.sphId, sphId))
+    .limit(1);
+
+  const invoiceValues = {
+    amountInWords: document.amountInWords,
+    customerDetailLine1: document.customerDetailLine1,
+    customerDetailLine2: document.customerDetailLine2,
+    customerDetailLine3: document.customerDetailLine3,
+    customerName: document.customerName,
+    franco: document.franco,
+    invoiceDate: document.sphDate,
+    invoiceNo: invoiceNoFromSph(document.sphNo),
+    paymentDueDate: document.paymentDueDate,
+    paymentTerm: document.paymentTerm,
+    sphId,
+    status: "pending" as const,
+    totalAmount: document.totalAmount,
+  };
+  const invoiceId = existingInvoice
+    ? existingInvoice.id
+    : (
+        await db
+          .insert(invoiceDocuments)
+          .values(invoiceValues)
+          .returning({ id: invoiceDocuments.id })
+      )[0].id;
+
+  if (existingInvoice) {
+    await db
+      .update(invoiceDocuments)
+      .set(invoiceValues)
+      .where(eq(invoiceDocuments.id, existingInvoice.id));
+    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
+  }
+
+  await db.insert(invoiceItems).values(
+    items.map((item) => ({
+      invoiceId,
+      lineNo: item.lineNo,
+      partName: item.partName,
+      partNumber: item.partNumber,
+      quantity: item.quantity,
+      sphItemId: item.id,
+      totalPrice: item.totalPrice,
+      unitPrice: item.unitPrice,
+    }))
+  );
+
+  await db
+    .update(sphDocuments)
+    .set({ status: "menunggu_pengiriman" })
+    .where(eq(sphDocuments.id, sphId));
+  revalidatePath("/dashboard");
+  revalidatePath("/invoice");
+  revalidatePath("/pengiriman");
   revalidatePath("/sph/list");
 }
 
@@ -258,6 +431,7 @@ export default async function ListSphPage({
     .sort((a, b) => a.localeCompare(b));
   const filteredDocuments = documents.filter((document) => {
     const items = itemsBySph.get(document.id) ?? [];
+    const status = normalizedStatus(document.status);
     const matchesQuery =
       !query ||
       [
@@ -272,8 +446,8 @@ export default async function ListSphPage({
     const matchesStatus =
       !statusFilter ||
       (statusFilter === "active"
-        ? document.status !== "cancelled" && document.status !== "invoiced"
-        : document.status === statusFilter);
+        ? status !== "cancel" && status !== "selesai"
+        : status === statusFilter);
     const matchesPayment = !paymentFilter || document.paymentTerm === paymentFilter;
     const matchesDate = isWithinDateRange(document.sphDate, fromDate, toDate);
 
@@ -311,7 +485,7 @@ export default async function ListSphPage({
             <select name="status" defaultValue={statusFilter}>
               <option value="">Semua Status</option>
               <option value="active">Aktif</option>
-              {["draft", "pending_invoice", "invoiced", "cancelled"].map((status) => (
+              {sphStatuses.map((status) => (
                 <option key={status} value={status}>
                   {statusLabel(status)}
                 </option>
@@ -355,6 +529,9 @@ export default async function ListSphPage({
               {pageRows.length > 0 ? (
                 pageRows.map((document) => {
                   const items = itemsBySph.get(document.id) ?? [];
+                  const status = normalizedStatus(document.status);
+                  const isCekHarga = status === "cek_harga";
+                  const isCancel = status === "cancel";
 
                   return (
                     <tr key={document.id}>
@@ -394,20 +571,48 @@ export default async function ListSphPage({
                         </details>
                       </td>
                       <td>
-                        <span className={`status-badge ${document.status}`}>
+                        <span className={`status-badge ${status}`}>
                           {statusLabel(document.status)}
                         </span>
                       </td>
                       <td>
                         <div className="table-actions icon-actions">
-                          <a
-                            aria-label={`Download ${document.sphNo}`}
-                            className="icon-action"
-                            href={`/sph/download/${document.id}`}
-                            title="Download SPH"
-                          >
-                            <DownloadIcon />
-                          </a>
+                          {isCekHarga ? (
+                            <button
+                              aria-label={`Download ${document.sphNo} disabled`}
+                              className="icon-action"
+                              disabled
+                              title="Approve harga dulu untuk download SPH"
+                              type="button"
+                            >
+                              <DownloadIcon />
+                            </button>
+                          ) : (
+                            <a
+                              aria-label={`Download ${document.sphNo}`}
+                              className="icon-action"
+                              href={`/sph/download/${document.id}`}
+                              title="Download SPH"
+                            >
+                              <DownloadIcon />
+                            </a>
+                          )}
+                          {isCekHarga ? (
+                            <ConfirmForm
+                              action={approveHargaAction}
+                              confirmMessage={`Approve harga SPH ${document.sphNo} dan buat invoice?`}
+                            >
+                              <input name="sphId" type="hidden" value={document.id} />
+                              <button
+                                aria-label={`Approve harga ${document.sphNo}`}
+                                className="icon-action success"
+                                title="Approve Harga"
+                                type="submit"
+                              >
+                                <CheckIcon />
+                              </button>
+                            </ConfirmForm>
+                          ) : null}
                           <Link
                             aria-label={`Edit ${document.sphNo}`}
                             className="icon-action"
@@ -416,19 +621,25 @@ export default async function ListSphPage({
                           >
                             <EditIcon />
                           </Link>
-                          <form action={cancelSphAction}>
+                          <ConfirmForm
+                            action={cancelSphAction}
+                            confirmMessage={`Cancel SPH ${document.sphNo}?`}
+                          >
                             <input name="sphId" type="hidden" value={document.id} />
                             <button
                               aria-label={`Cancel ${document.sphNo}`}
                               className="icon-action warning"
-                              disabled={document.status === "cancelled"}
+                              disabled={isCancel}
                               title="Cancel SPH"
                               type="submit"
                             >
                               <CancelIcon />
                             </button>
-                          </form>
-                          <form action={deleteSphAction}>
+                          </ConfirmForm>
+                          <ConfirmForm
+                            action={deleteSphAction}
+                            confirmMessage={`Hapus SPH ${document.sphNo} beserta invoice terkait?`}
+                          >
                             <input name="sphId" type="hidden" value={document.id} />
                             <button
                               aria-label={`Delete ${document.sphNo}`}
@@ -438,7 +649,7 @@ export default async function ListSphPage({
                             >
                               <TrashIcon />
                             </button>
-                          </form>
+                          </ConfirmForm>
                         </div>
                       </td>
                     </tr>

@@ -181,6 +181,7 @@ async function updateSphAction(formData: FormData) {
     .select({
       id: sphDocuments.id,
       sphNo: sphDocuments.sphNo,
+      status: sphDocuments.status,
     })
     .from(sphDocuments)
     .where(eq(sphDocuments.id, sphId))
@@ -331,7 +332,7 @@ async function updateSphAction(formData: FormData) {
         unitPrice: item.unitPrice,
       }))
     );
-  } else {
+  } else if (!["cek_harga", "draft", "cancel", "cancelled"].includes(existingSph.status)) {
     const insertedInvoice = await db
       .insert(invoiceDocuments)
       .values({

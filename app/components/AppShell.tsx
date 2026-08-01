@@ -30,6 +30,8 @@ const assetItems: NavItem[] = [
   { label: "ASSET LIST", href: "/asset/asset-list" },
 ];
 
+const appVersion = "1.0.0";
+
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -151,7 +153,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
 
-      <main className="main-content">{children}</main>
+      <main className="main-content">
+        <div className="main-content-body">{children}</div>
+        <footer className="app-footer">
+          <span>Copyright 2026 Rizqi Ramadhan all Rights Reserved</span>
+          <span>Version {appVersion}</span>
+        </footer>
+      </main>
     </div>
   );
 }

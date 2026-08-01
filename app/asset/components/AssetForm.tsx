@@ -1,3 +1,5 @@
+import { ConfirmForm } from "../../components/ConfirmForm";
+
 type AssetFormValues = {
   acquisitionDate?: string | null;
   assetCode?: string;
@@ -29,7 +31,11 @@ export function AssetForm({ action, asset, submitLabel, title }: AssetFormProps)
         </div>
       </div>
 
-      <form action={action} className="payment-request-form asset-form">
+      <ConfirmForm
+        action={action}
+        className="payment-request-form asset-form"
+        confirmMessage={asset?.id ? "Simpan perubahan asset ini?" : "Buat asset baru dengan data ini?"}
+      >
         {asset?.id ? <input name="id" type="hidden" value={asset.id} /> : null}
         <label>
           <span>Kode Asset</span>
@@ -109,7 +115,7 @@ export function AssetForm({ action, asset, submitLabel, title }: AssetFormProps)
           />
         </label>
         <button type="submit">{submitLabel}</button>
-      </form>
+      </ConfirmForm>
     </section>
   );
 }

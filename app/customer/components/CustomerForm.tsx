@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ConfirmForm } from "../../components/ConfirmForm";
 
 type CustomerRow = {
   id: string | number;
@@ -41,7 +42,15 @@ export function CustomerForm({
       </div>
 
       {showForm && action ? (
-        <form action={action} className="customer-form">
+        <ConfirmForm
+          action={action}
+          className="customer-form"
+          confirmMessage={
+            customer
+              ? "Simpan perubahan customer ini?"
+              : "Buat customer baru dengan data ini?"
+          }
+        >
           {customer ? <input name="id" type="hidden" value={customer.id} /> : null}
 
           <label>
@@ -104,7 +113,7 @@ export function CustomerForm({
           </label>
 
           <button type="submit">{customer ? "Simpan customer" : "Buat customer"}</button>
-        </form>
+        </ConfirmForm>
       ) : null}
 
       {showList ? (

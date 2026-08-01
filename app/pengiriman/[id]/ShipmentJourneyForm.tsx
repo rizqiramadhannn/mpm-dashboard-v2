@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ConfirmForm } from "../../components/ConfirmForm";
 
 type SupplierOption = {
   id: string;
@@ -28,6 +29,7 @@ type JourneySplit = {
   shippingVendor: string;
   shippingCost: number;
   isShippingPaid: boolean;
+  customerReceived: boolean;
 };
 
 type JourneyByItem = Record<string, JourneySplit[]>;
@@ -59,6 +61,7 @@ function createSplit(itemId: string, splitNo: number, destinationFallback: strin
     shippingCost: 0,
     shippingVendor: "",
     isShippingPaid: false,
+    customerReceived: false,
     splitNo,
     supplierId: null,
     supplyType: "stock",
@@ -173,8 +176,53 @@ export function ShipmentJourneyForm({
     });
   }
 
+  function updateCustomerReceived(itemId: string, rowKey: string, checked: boolean) {
+    updateSplit(itemId, rowKey, {
+      customerReceived: checked,
+      latestStatus: checked ? "TERKIRIM" : "",
+    });
+  }
+
+  function hiddenReceivedFields(item: ShipmentItem, split: SplitRow) {
+    if (!split.customerReceived) {
+      return null;
+    }
+
+    return (
+      <>
+        <input name={`quantity-${item.id}-${split.rowKey}`} type="hidden" value={split.quantity} />
+        <input name={`supply-${item.id}-${split.rowKey}`} type="hidden" value={supplyValue(split)} />
+        <input name={`origin-${item.id}-${split.rowKey}`} type="hidden" value={split.origin} />
+        <input
+          name={`destination-${item.id}-${split.rowKey}`}
+          type="hidden"
+          value={split.destination || destinationFallback}
+        />
+        <input name={`latestStatus-${item.id}-${split.rowKey}`} type="hidden" value="TERKIRIM" />
+        <input
+          name={`shippingVendor-${item.id}-${split.rowKey}`}
+          type="hidden"
+          value={split.shippingVendor}
+        />
+        <input
+          name={`shippingCost-${item.id}-${split.rowKey}`}
+          type="hidden"
+          value={split.shippingCost}
+        />
+        {split.isShippingPaid ? (
+          <input name={`isShippingPaid-${item.id}-${split.rowKey}`} type="hidden" value="on" />
+        ) : null}
+        <input name={`customerReceived-${item.id}-${split.rowKey}`} type="hidden" value="on" />
+      </>
+    );
+  }
+
   return (
-    <form action={action} className="shipment-detail-page">
+    <ConfirmForm
+      action={action}
+      className="shipment-detail-page"
+      confirmMessage={`Simpan journey pengiriman untuk ${sphNo}?`}
+    >
       <input name="sphId" type="hidden" value={sphId} />
       <section className="form-section">
         <div className="section-heading">
@@ -227,6 +275,7 @@ export function ShipmentJourneyForm({
                 <div className="shipment-split-list">
                   {rows.map((split, index) => (
                     <div className="shipment-split" key={split.rowKey}>
+                      {hiddenReceivedFields(item, split)}
                       <input
                         name={`journeyId-${item.id}`}
                         type="hidden"
@@ -241,7 +290,7 @@ export function ShipmentJourneyForm({
                         <strong>Split {index + 1}</strong>
                         <button
                           className="icon-button"
-                          disabled={rows.length <= 1}
+                          disabled={rows.length <= 1 || split.customerReceived}
                           onClick={() => removeSplit(item.id, split.rowKey)}
                           type="button"
                           aria-label={`Hapus split ${index + 1}`}
@@ -254,6 +303,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Qty</span>
                           <input
+                            disabled={split.customerReceived}
                             min="0"
                             name={`quantity-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
@@ -271,6 +321,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Supply</span>
                           <select
+                            disabled={split.customerReceived}
                             name={`supply-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSupply(item.id, split.rowKey, event.target.value)
@@ -289,6 +340,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Asal</span>
                           <input
+                            disabled={split.customerReceived}
                             name={`origin-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSplit(item.id, split.rowKey, {
@@ -303,6 +355,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Tujuan</span>
                           <input
+                            disabled={split.customerReceived}
                             name={`destination-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSplit(item.id, split.rowKey, {
@@ -317,6 +370,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Status Terakhir</span>
                           <input
+                            disabled={split.customerReceived}
                             name={`latestStatus-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSplit(item.id, split.rowKey, {
@@ -331,6 +385,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Vendor Pengiriman</span>
                           <input
+                            disabled={split.customerReceived}
                             name={`shippingVendor-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSplit(item.id, split.rowKey, {
@@ -345,6 +400,7 @@ export function ShipmentJourneyForm({
                         <label>
                           <span>Biaya Kirim</span>
                           <input
+                            disabled={split.customerReceived}
                             min="0"
                             name={`shippingCost-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
@@ -360,6 +416,7 @@ export function ShipmentJourneyForm({
 
                         <label className="checkbox-field">
                           <input
+                            disabled={split.customerReceived}
                             name={`isShippingPaid-${item.id}-${split.rowKey}`}
                             onChange={(event) =>
                               updateSplit(item.id, split.rowKey, {
@@ -371,6 +428,23 @@ export function ShipmentJourneyForm({
                           />
                           <span>Sudah dibayar</span>
                         </label>
+
+                        <label className="checkbox-field">
+                          <input
+                            checked={split.customerReceived}
+                            disabled={split.customerReceived}
+                            name={`customerReceived-${item.id}-${split.rowKey}`}
+                            onChange={(event) =>
+                              updateCustomerReceived(
+                                item.id,
+                                split.rowKey,
+                                event.target.checked
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>Diterima customer</span>
+                        </label>
                       </div>
                     </div>
                   ))}
@@ -378,6 +452,7 @@ export function ShipmentJourneyForm({
 
                 <button
                   className="secondary-button split-add-button"
+                  disabled={(rowsByItem[item.id] ?? []).every((split) => split.customerReceived)}
                   onClick={() => addSplit(item)}
                   type="button"
                 >
@@ -390,6 +465,6 @@ export function ShipmentJourneyForm({
           <section className="empty-state">SPH ini belum memiliki item.</section>
         )}
       </div>
-    </form>
+    </ConfirmForm>
   );
 }

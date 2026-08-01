@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ConfirmForm } from "../../components/ConfirmForm";
 
 type SupplierRow = {
   id: string;
@@ -42,7 +43,13 @@ export function SupplierForm({
         </div>
       </div>
 
-      <form action={action} className="customer-form">
+      <ConfirmForm
+        action={action}
+        className="customer-form"
+        confirmMessage={
+          supplier ? "Simpan perubahan supplier ini?" : "Buat supplier baru dengan data ini?"
+        }
+      >
         {supplier ? <input name="id" type="hidden" value={supplier.id} /> : null}
 
         <label>
@@ -116,7 +123,7 @@ export function SupplierForm({
         </label>
 
         <button type="submit">{supplier ? "Simpan supplier" : "Buat supplier"}</button>
-      </form>
+      </ConfirmForm>
     </section>
   );
 }
@@ -172,12 +179,15 @@ export function SupplierList({
                   <td>
                     <div className="table-actions">
                       <a href={`/supplier/edit-supplier/${supplier.id}`}>Edit</a>
-                      <form action={deleteAction}>
+                      <ConfirmForm
+                        action={deleteAction}
+                        confirmMessage={`Hapus supplier ${supplier.name}?`}
+                      >
                         <input name="id" type="hidden" value={supplier.id} />
                         <button type="submit" className="danger">
                           Delete
                         </button>
-                      </form>
+                      </ConfirmForm>
                     </div>
                   </td>
                 </tr>

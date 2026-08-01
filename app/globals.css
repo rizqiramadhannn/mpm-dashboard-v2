@@ -154,8 +154,28 @@ a {
 }
 
 .main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   min-width: 0;
   padding: 32px;
+}
+
+.main-content-body {
+  flex: 1 1 auto;
+}
+
+.app-footer {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 8px 14px;
+  justify-content: space-between;
+  padding-top: 16px;
 }
 
 .placeholder-page {
@@ -1093,22 +1113,31 @@ a {
   white-space: nowrap;
 }
 
-.status-badge.draft {
+.status-badge.draft,
+.status-badge.cek_harga {
   background: #eef2f7;
   color: #475467;
 }
 
-.status-badge.pending_invoice {
+.status-badge.pending_invoice,
+.status-badge.menunggu_pengiriman {
   background: #fff7df;
   color: #9a6700;
 }
 
-.status-badge.invoiced {
+.status-badge.invoiced,
+.status-badge.proses_pengiriman {
+  background: #e8f1ff;
+  color: #175cd3;
+}
+
+.status-badge.selesai {
   background: #e9f8f2;
   color: #047857;
 }
 
-.status-badge.cancelled {
+.status-badge.cancelled,
+.status-badge.cancel {
   background: var(--primary-soft);
   color: var(--primary);
 }
@@ -1365,6 +1394,12 @@ a {
   background: #fff7df;
   border-color: #f6dc91;
   color: #9a6700;
+}
+
+.table-actions button.icon-action.success {
+  background: #e9f8f2;
+  border-color: #b7ead5;
+  color: #047857;
 }
 
 .table-actions button.icon-action:disabled {

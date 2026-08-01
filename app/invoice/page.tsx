@@ -23,11 +23,24 @@ type InvoiceRow = {
   invoiceNo: string;
   kodAmount: number;
   modalAmount: number;
+  paidAmount: number;
   paymentDueDate: string | null;
   paymentTerm: string;
+  paymentProofFilesJson:
+    | {
+        base64: string;
+        mimeType: string;
+        name: string;
+        sha256: string;
+        size: number;
+      }[]
+    | null;
   processedAt: string | null;
   sphId: string;
   status: "draft" | "pending" | "pending_replace" | "done" | "cancelled";
+  ttdMateraiFileMimeType: string;
+  ttdMateraiFileName: string;
+  ttdMateraiFileSize: number;
   totalAmount: number;
 };
 
@@ -44,8 +57,24 @@ type SphRow = {
   paymentTerm: string;
   sphDate: string;
   sphNo: string;
+  status: string;
   totalAmount: number;
 };
+
+function normalizedSphStatus(status: string) {
+  const aliases: Record<string, string> = {
+    cancelled: "cancel",
+    draft: "cek_harga",
+    invoiced: "menunggu_pengiriman",
+    pending_invoice: "menunggu_pengiriman",
+  };
+
+  return aliases[status] ?? status;
+}
+
+function isInvoiceEligibleSph(status: string) {
+  return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
+}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -233,11 +262,16 @@ async function ensureInvoicesForSph(sphRows: SphRow[], invoiceRows: InvoiceRow[]
         invoiceNo: invoiceDocuments.invoiceNo,
         kodAmount: invoiceDocuments.kodAmount,
         modalAmount: invoiceDocuments.modalAmount,
+        paidAmount: invoiceDocuments.paidAmount,
         paymentDueDate: invoiceDocuments.paymentDueDate,
         paymentTerm: invoiceDocuments.paymentTerm,
+        paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
         processedAt: invoiceDocuments.processedAt,
         sphId: invoiceDocuments.sphId,
         status: invoiceDocuments.status,
+        ttdMateraiFileMimeType: invoiceDocuments.ttdMateraiFileMimeType,
+        ttdMateraiFileName: invoiceDocuments.ttdMateraiFileName,
+        ttdMateraiFileSize: invoiceDocuments.ttdMateraiFileSize,
         totalAmount: invoiceDocuments.totalAmount,
       });
     insertedInvoices.push(insertedInvoice);
@@ -300,11 +334,13 @@ export default async function InvoicePage({
       paymentTerm: sphDocuments.paymentTerm,
       sphDate: sphDocuments.sphDate,
       sphNo: sphDocuments.sphNo,
+      status: sphDocuments.status,
       totalAmount: sphDocuments.totalAmount,
     })
     .from(sphDocuments)
     .orderBy(desc(sphDocuments.createdAt), desc(sphDocuments.id));
-  const sphIds = sphRows.map((row) => row.id);
+  const invoiceEligibleSphRows = sphRows.filter((row) => isInvoiceEligibleSph(row.status));
+  const sphIds = invoiceEligibleSphRows.map((row) => row.id);
   const invoiceRows: InvoiceRow[] =
     sphIds.length > 0
       ? await db
@@ -315,17 +351,25 @@ export default async function InvoicePage({
             invoiceNo: invoiceDocuments.invoiceNo,
             kodAmount: invoiceDocuments.kodAmount,
             modalAmount: invoiceDocuments.modalAmount,
+            paidAmount: invoiceDocuments.paidAmount,
             paymentDueDate: invoiceDocuments.paymentDueDate,
             paymentTerm: invoiceDocuments.paymentTerm,
+            paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
             processedAt: invoiceDocuments.processedAt,
             sphId: invoiceDocuments.sphId,
             status: invoiceDocuments.status,
+            ttdMateraiFileMimeType: invoiceDocuments.ttdMateraiFileMimeType,
+            ttdMateraiFileName: invoiceDocuments.ttdMateraiFileName,
+            ttdMateraiFileSize: invoiceDocuments.ttdMateraiFileSize,
             totalAmount: invoiceDocuments.totalAmount,
           })
           .from(invoiceDocuments)
           .where(inArray(invoiceDocuments.sphId, sphIds))
       : [];
-  const syncedInvoiceRows = await ensureInvoicesForSph(sphRows, invoiceRows);
+  const syncedInvoiceRows = await ensureInvoicesForSph(
+    invoiceEligibleSphRows,
+    invoiceRows
+  );
   const invoiceBySph = new Map(syncedInvoiceRows.map((invoice) => [invoice.sphId, invoice]));
   const itemRows =
     sphIds.length > 0
@@ -359,7 +403,7 @@ export default async function InvoicePage({
     }
   }
 
-  const ledgerRows: LedgerRow[] = sphRows.map((sph) => {
+  const ledgerRows: LedgerRow[] = invoiceEligibleSphRows.map((sph) => {
     const invoice = invoiceBySph.get(sph.id);
     const invoiceDate = invoice?.invoiceDate ?? sph.sphDate;
     const paymentTerm = invoice?.paymentTerm ?? sph.paymentTerm;
@@ -371,10 +415,14 @@ export default async function InvoicePage({
     const modalAmount = invoice?.modalAmount ?? 0;
     const feeAmount = invoice?.feeAmount ?? 0;
     const kodAmount = invoice?.kodAmount ?? 0;
+    const paidAmount = invoice?.paidAmount ?? 0;
     const ongkirAmount = ongkirBySph.get(sph.id) ?? 0;
     const hppAmount = modalAmount + feeAmount + ongkirAmount + kodAmount;
     const gpAmount = totalAmount - hppAmount;
-    const status = ledgerStatus(invoice?.status ?? "pending");
+    const status =
+      paidAmount >= totalAmount && totalAmount > 0
+        ? "LUNAS"
+        : ledgerStatus(invoice?.status ?? "pending");
 
     return {
       aging: status === "LUNAS" ? "-" : diffDays(dueDate),
@@ -390,13 +438,27 @@ export default async function InvoicePage({
       kodAmount,
       modalAmount,
       ongkirAmount,
+      paidAmount,
       paymentDate: invoice?.processedAt ? formatDate(invoice.processedAt) : "-",
       paymentDueDate: formatDate(dueDate),
+      paymentProofFiles:
+        invoice?.paymentProofFilesJson?.map((file) => ({
+          mimeType: file.mimeType,
+          name: file.name,
+          size: file.size,
+        })) ?? [],
       paymentTerm,
       sphId: sph.id,
       sphNo: sph.sphNo,
       status,
       statusClassName: status.toLowerCase().replace(/\s+/g, "-"),
+      ttdMateraiFile: invoice?.ttdMateraiFileName
+        ? {
+            mimeType: invoice.ttdMateraiFileMimeType,
+            name: invoice.ttdMateraiFileName,
+            size: invoice.ttdMateraiFileSize,
+          }
+        : null,
       totalAmount,
     };
   });
@@ -430,7 +492,7 @@ export default async function InvoicePage({
     (summary, row) => {
       summary.omset += row.totalAmount;
       if (row.status === "BELUM BAYAR") {
-        summary.unpaid += row.totalAmount;
+        summary.unpaid += Math.max(row.totalAmount - row.paidAmount, 0);
       }
       return summary;
     },

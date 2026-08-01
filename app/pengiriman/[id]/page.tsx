@@ -26,6 +26,7 @@ type JourneyRow = {
   shippingVendor: string;
   shippingCost: number;
   isShippingPaid: boolean;
+  customerReceived: boolean;
 };
 
 function formText(formData: FormData, key: string) {
@@ -66,6 +67,16 @@ async function updateShipmentJourneyAction(formData: FormData) {
 
   const sphId = sphIdValue.trim();
   const db = await getDb();
+  const [document] = await db
+    .select({ status: sphDocuments.status })
+    .from(sphDocuments)
+    .where(eq(sphDocuments.id, sphId))
+    .limit(1);
+
+  if (!document) {
+    throw new Error("SPH tidak ditemukan.");
+  }
+
   const itemRows = await db
     .select({
       id: sphItems.id,
@@ -91,11 +102,17 @@ async function updateShipmentJourneyAction(formData: FormData) {
         `Qty split ${index + 1}`
       );
       const supply = parseSupply(formText(formData, `supply-${item.id}-${splitKey}`));
+      const customerReceived =
+        formData.get(`customerReceived-${item.id}-${splitKey}`) === "on";
 
       return {
         destination: formText(formData, `destination-${item.id}-${splitKey}`),
         isShippingPaid: formData.get(`isShippingPaid-${item.id}-${splitKey}`) === "on",
-        latestStatus: formText(formData, `latestStatus-${item.id}-${splitKey}`),
+        customerReceived,
+        customerReceivedAt: customerReceived ? new Date().toISOString() : null,
+        latestStatus: customerReceived
+          ? "TERKIRIM"
+          : formText(formData, `latestStatus-${item.id}-${splitKey}`),
         origin: formText(formData, `origin-${item.id}-${splitKey}`),
         quantity,
         shippingCost: parseInteger(
@@ -124,8 +141,53 @@ async function updateShipmentJourneyAction(formData: FormData) {
     await db.insert(shipmentJourneys).values(journeyValues);
   }
 
+  const receivedQtyByItem = new Map<string, number>();
+  let hasShipmentData = false;
+
+  for (const journey of journeyValues) {
+    if (journey.customerReceived) {
+      receivedQtyByItem.set(
+        journey.sphItemId,
+        (receivedQtyByItem.get(journey.sphItemId) ?? 0) + (journey.quantity ?? 0)
+      );
+    }
+
+    if (
+      journey.customerReceived ||
+      (journey.latestStatus ?? "").trim() ||
+      (journey.origin ?? "").trim() ||
+      (journey.shippingVendor ?? "").trim() ||
+      (journey.shippingCost ?? 0) > 0 ||
+      journey.isShippingPaid ||
+      journey.supplyType === "supplier"
+    ) {
+      hasShipmentData = true;
+    }
+  }
+
+  const isComplete = itemRows.every(
+    (item) => (receivedQtyByItem.get(item.id) ?? 0) >= item.quantity
+  );
+  const currentStatus = document.status;
+
+  if (!["cek_harga", "draft", "cancel", "cancelled"].includes(currentStatus)) {
+    const nextStatus = isComplete
+      ? "selesai"
+      : hasShipmentData
+        ? "proses_pengiriman"
+        : "menunggu_pengiriman";
+
+    await db
+      .update(sphDocuments)
+      .set({ status: nextStatus })
+      .where(eq(sphDocuments.id, sphId));
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/invoice");
   revalidatePath("/pengiriman");
   revalidatePath(`/pengiriman/${sphId}`);
+  revalidatePath("/sph/list");
 }
 
 export default async function PengirimanDetailPage({
@@ -187,6 +249,7 @@ export default async function PengirimanDetailPage({
             shippingVendor: shipmentJourneys.shippingVendor,
             shippingCost: shipmentJourneys.shippingCost,
             isShippingPaid: shipmentJourneys.isShippingPaid,
+            customerReceived: shipmentJourneys.customerReceived,
           })
           .from(shipmentJourneys)
           .where(inArray(shipmentJourneys.sphItemId, itemIds))

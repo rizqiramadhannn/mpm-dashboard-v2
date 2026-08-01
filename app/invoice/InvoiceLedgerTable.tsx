@@ -2,6 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 
+type InvoiceFile = {
+  mimeType: string;
+  name: string;
+  size: number;
+};
+
 export type LedgerRow = {
   aging: string;
   customerName: string;
@@ -16,17 +22,28 @@ export type LedgerRow = {
   kodAmount: number;
   modalAmount: number;
   ongkirAmount: number;
+  paidAmount: number;
   paymentDate: string;
   paymentDueDate: string;
+  paymentProofFiles: InvoiceFile[];
   paymentTerm: string;
   sphId: string;
   sphNo: string;
   status: string;
   statusClassName: string;
+  ttdMateraiFile: InvoiceFile | null;
   totalAmount: number;
 };
 
-type EditableField = "modalAmount" | "feeAmount" | "kodAmount";
+type EditableField = "modalAmount" | "feeAmount" | "kodAmount" | "paidAmount";
+
+type PreviewState = {
+  files: InvoiceFile[];
+  invoiceId: string;
+  selectedIndex: number;
+  title: string;
+  type: "ttd" | "paymentProof";
+} | null;
 
 type InvoiceLedgerTableProps = {
   rows: LedgerRow[];
@@ -37,6 +54,43 @@ function formatMoney(value: number) {
   return `Rp ${new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 0,
   }).format(value)}`;
+}
+
+function formatFileSize(value: number) {
+  if (!value) {
+    return "";
+  }
+
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function fileLabel(fileName: string, fileSize: number) {
+  const size = formatFileSize(fileSize);
+  return size ? `${fileName} (${size})` : fileName;
+}
+
+function FileIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M14 2v6h6M8 13h8M8 17h5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
 }
 
 function parseAmount(value: string) {
@@ -64,6 +118,8 @@ export function InvoiceLedgerTable({
     null
   );
   const [draftValue, setDraftValue] = useState("");
+  const [preview, setPreview] = useState<PreviewState>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const rowById = useMemo(
     () => new Map(localRows.map((row) => [row.sphId, row])),
@@ -80,6 +136,41 @@ export function InvoiceLedgerTable({
     setDraftValue("");
   }
 
+  async function updatePaidAmount(row: LedgerRow, amount: number) {
+    const response = await fetch("/api/invoices", {
+      body: JSON.stringify({ id: row.invoiceId, paidAmount: amount }),
+      headers: { "content-type": "application/json" },
+      method: "PATCH",
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error ?? "Gagal mengubah terbayar.");
+    }
+
+    const status = result.data.status === "done" ? "LUNAS" : "BELUM BAYAR";
+
+    setLocalRows((current) =>
+      current.map((currentRow) =>
+        currentRow.sphId === row.sphId
+          ? {
+              ...currentRow,
+              paidAmount: result.data.paidAmount,
+              paymentDate: result.data.processedAt
+                ? new Intl.DateTimeFormat("id-ID", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                  }).format(new Date(result.data.processedAt))
+                : "-",
+              status,
+              statusClassName: status.toLowerCase().replace(/\s+/g, "-"),
+            }
+          : currentRow
+      )
+    );
+  }
+
   function commitEdit() {
     if (!editing) {
       return;
@@ -93,6 +184,22 @@ export function InvoiceLedgerTable({
     }
 
     const amount = parseAmount(draftValue);
+
+    const label = editing.field === "paidAmount" ? "Terbayar" : editing.field;
+
+    if (!window.confirm(`Simpan perubahan ${label} untuk ${row.invoiceNo}?`)) {
+      closeEdit();
+      return;
+    }
+
+    if (editing.field === "paidAmount") {
+      void updatePaidAmount(row, amount).catch((error) => {
+        window.alert(error instanceof Error ? error.message : "Gagal mengubah terbayar.");
+      });
+      closeEdit();
+      return;
+    }
+
     setLocalRows((current) =>
       current.map((currentRow) =>
         currentRow.sphId === editing.rowId
@@ -166,9 +273,121 @@ export function InvoiceLedgerTable({
     );
   }
 
+  function fileCell(row: LedgerRow, type: "ttd" | "paymentProof") {
+    const files =
+      type === "ttd" ? (row.ttdMateraiFile ? [row.ttdMateraiFile] : []) : row.paymentProofFiles;
+    const uploadKey = `${row.invoiceId}:${type}`;
+    const label = type === "ttd" ? "TTD Materai" : "Bukti Bayar";
+
+    async function uploadFiles(filesToUpload: FileList | null) {
+      if (!row.invoiceId || !filesToUpload || filesToUpload.length === 0) {
+        return;
+      }
+
+      if (!window.confirm(`Upload ${label} untuk ${row.invoiceNo}?`)) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.set("id", row.invoiceId);
+
+      if (type === "ttd") {
+        formData.set("ttdMateraiFile", filesToUpload[0]);
+      } else {
+        Array.from(filesToUpload).forEach((file) => {
+          formData.append("paymentProofFiles", file);
+        });
+      }
+
+      setUploading(uploadKey);
+
+      try {
+        const response = await fetch("/api/invoices", {
+          body: formData,
+          method: "PATCH",
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error ?? "Gagal upload file.");
+        }
+
+        setLocalRows((current) =>
+          current.map((currentRow) =>
+            currentRow.sphId === row.sphId
+              ? {
+                  ...currentRow,
+                  paymentProofFiles:
+                    result.data.paymentProofFiles?.map((file: InvoiceFile) => ({
+                      mimeType: file.mimeType,
+                      name: file.name,
+                      size: file.size,
+                    })) ?? currentRow.paymentProofFiles,
+                  ttdMateraiFile: result.data.ttdMateraiFileName
+                    ? {
+                        mimeType: result.data.ttdMateraiFileMimeType,
+                        name: result.data.ttdMateraiFileName,
+                        size: result.data.ttdMateraiFileSize,
+                      }
+                    : currentRow.ttdMateraiFile,
+                }
+              : currentRow
+          )
+        );
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Gagal upload file.");
+      } finally {
+        setUploading(null);
+      }
+    }
+
+    return (
+      <div className="file-action-cell">
+        {files.length > 0 && row.invoiceId ? (
+          <button
+            className="file-preview-button"
+            onClick={() =>
+              setPreview({
+                files,
+                invoiceId: row.invoiceId ?? "",
+                selectedIndex: 0,
+                title: `${label} - ${row.invoiceNo}`,
+                type,
+              })
+            }
+            title={fileLabel(files[0]?.name || label, files[0]?.size || 0)}
+            type="button"
+          >
+            <FileIcon />
+            <span>{type === "paymentProof" && files.length > 1 ? `${label} (${files.length})` : label}</span>
+          </button>
+        ) : null}
+        <label className="file-upload-button">
+          <input
+            accept="application/pdf,image/*"
+            disabled={!row.invoiceId}
+            multiple={type === "paymentProof"}
+            onChange={(event) => {
+              void uploadFiles(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+            type="file"
+          />
+          {uploading === uploadKey ? "Uploading..." : "Upload"}
+        </label>
+      </div>
+    );
+  }
+
+  const previewFile = preview?.files[preview.selectedIndex];
+  const previewUrl = preview
+    ? `/invoice/file/${preview.invoiceId}?type=${preview.type}&index=${preview.selectedIndex}&inline=1`
+    : "";
+
   return (
-    <div className="customer-table-wrap invoice-ledger-wrap">
-      <table className="customer-table invoice-ledger-table">
+    <>
+      <div className="customer-table-wrap invoice-ledger-wrap">
+        <table className="customer-table invoice-ledger-table">
         <thead>
           <tr>
             <th>NO</th>
@@ -177,6 +396,7 @@ export function InvoiceLedgerTable({
             <th>NO INVOICE</th>
             <th>CATEGORY</th>
             <th>OMSET</th>
+            <th>TERBAYAR</th>
             <th>MODAL</th>
             <th>FEE</th>
             <th>ONGKIR</th>
@@ -189,6 +409,8 @@ export function InvoiceLedgerTable({
             <th>JADWAL PEMBAYARAN</th>
             <th>TANGGAL BAYAR</th>
             <th>AGING</th>
+            <th>TTD MATERAI</th>
+            <th>BUKTI BAYAR</th>
             <th>ACTION</th>
           </tr>
         </thead>
@@ -207,6 +429,7 @@ export function InvoiceLedgerTable({
                 <td>{row.invoiceNo}</td>
                 <td>SPARE PARTS</td>
                 <td>{formatMoney(row.totalAmount)}</td>
+                <td>{editableCell(row, "paidAmount")}</td>
                 <td>{editableCell(row, "modalAmount")}</td>
                 <td>{editableCell(row, "feeAmount")}</td>
                 <td>{formatMoney(row.ongkirAmount)}</td>
@@ -223,6 +446,8 @@ export function InvoiceLedgerTable({
                 <td>{row.paymentDueDate}</td>
                 <td>{row.paymentDate}</td>
                 <td>{row.aging}</td>
+                <td>{fileCell(row, "ttd")}</td>
+                <td>{fileCell(row, "paymentProof")}</td>
                 <td>
                   {row.invoiceId ? (
                     <div className="table-actions">
@@ -236,11 +461,49 @@ export function InvoiceLedgerTable({
             ))
           ) : (
             <tr>
-              <td colSpan={19}>Belum ada SPH untuk invoice.</td>
+              <td colSpan={22}>Belum ada SPH untuk invoice.</td>
             </tr>
           )}
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+
+      {preview ? (
+        <div className="preview-modal-backdrop" role="presentation">
+          <div aria-modal="true" className="preview-modal" role="dialog">
+            <div className="preview-modal-header">
+              <div className="preview-modal-title">
+                <strong>{preview.title}</strong>
+                {previewFile ? <span>{fileLabel(previewFile.name, previewFile.size)}</span> : null}
+              </div>
+              <button onClick={() => setPreview(null)} type="button">
+                Tutup
+              </button>
+            </div>
+            {preview.files.length > 1 ? (
+              <div className="preview-file-tabs">
+                {preview.files.map((file, index) => (
+                  <button
+                    className={index === preview.selectedIndex ? "active" : ""}
+                    key={`${file.name}-${index}`}
+                    onClick={() =>
+                      setPreview((currentPreview) =>
+                        currentPreview
+                          ? { ...currentPreview, selectedIndex: index }
+                          : currentPreview
+                      )
+                    }
+                    type="button"
+                  >
+                    {file.name || `Bukti Bayar ${index + 1}`}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <iframe className="preview-modal-frame" src={previewUrl} title={preview.title} />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
