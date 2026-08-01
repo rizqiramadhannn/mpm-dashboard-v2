@@ -176,7 +176,7 @@ async function getDashboardData() {
   const monthKeys = months.map(monthKey);
   const monthLabels = months.map((date) => monthNames[date.getMonth()]);
 
-  const [invoices, sphRows, supplierNoteRows, shipmentRows, sphItemRows] =
+  const [rawInvoices, sphRows, supplierNoteRows, shipmentRows, sphItemRows] =
     await Promise.all([
       db
         .select({
@@ -185,6 +185,7 @@ async function getDashboardData() {
           invoiceDate: invoiceDocuments.invoiceDate,
           invoiceNo: invoiceDocuments.invoiceNo,
           paymentDueDate: invoiceDocuments.paymentDueDate,
+          sphId: invoiceDocuments.sphId,
           status: invoiceDocuments.status,
           totalAmount: invoiceDocuments.totalAmount,
         })
@@ -232,6 +233,8 @@ async function getDashboardData() {
         .from(sphItems),
     ]);
 
+  const validSphIds = new Set(sphRows.map((sph) => sph.id));
+  const invoices = rawInvoices.filter((invoice) => validSphIds.has(invoice.sphId));
   const sphIdByItem = new Map(sphItemRows.map((item) => [item.id, item.sphId]));
   const sphByInternalId = new Map(sphRows.map((sph) => [sph.id, sph]));
 
