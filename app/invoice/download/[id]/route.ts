@@ -15,7 +15,7 @@ type InvoiceDocument = {
   paymentDueDate: string | null;
   paymentTerm: string;
   poNo: string;
-  sphNo: string;
+  sphNo: string | null;
   totalAmount: number;
 };
 

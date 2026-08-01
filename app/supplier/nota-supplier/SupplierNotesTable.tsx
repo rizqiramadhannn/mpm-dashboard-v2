@@ -31,7 +31,7 @@ type SupplierNote = {
   paymentProofFileUrl: string;
   paymentProofFiles: SupplierNoteFile[];
   items: {
-    id: number;
+    id: string;
     lineNo: number;
     partNumber: string;
     description: string;
