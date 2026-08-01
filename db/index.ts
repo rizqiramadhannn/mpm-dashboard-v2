@@ -10,11 +10,12 @@ export async function getDb() {
   }
 
   const url = process.env.TURSO_DATABASE_URL;
-  const authToken = process.env.TURSO_AUTH_TOKEN;
+  const authToken =
+    process.env.TURSO_AUTH_TOKEN ?? process.env.TURSO_DATABASE_TURSO_AUTH_TOKEN;
 
   if (!url || !authToken) {
     throw new Error(
-      "Turso database credentials are unavailable. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in your environment before using the database."
+      "Turso database credentials are unavailable. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN or TURSO_DATABASE_TURSO_AUTH_TOKEN in your environment before using the database."
     );
   }
 
