@@ -30,6 +30,9 @@ const assetItems: NavItem[] = [
   { label: "ASSET LIST", href: "/asset/asset-list" },
 ];
 
+const inventoryUrl =
+  "https://docs.google.com/spreadsheets/d/1YokPzd8cGFmHoN1xLvNaA-o-mDbt2A6sRqPkll7GHNY/edit?gid=1188437955#gid=1188437955&fvid=2137505468";
+
 const appVersion = "1.0.0";
 
 function isActive(pathname: string, href: string) {
@@ -135,6 +138,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             PAYMENT REQUEST
           </Link>
+
+          <a
+            className="nav-link"
+            href={inventoryUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            INVENTORY
+          </a>
 
           <div className="nav-group">
             <div className={`nav-group-label ${assetActive ? "active" : ""}`}>ASSET</div>
