@@ -19,6 +19,8 @@ export const customers = sqliteTable(
     detailLine2: text("detail_line_2").notNull().default(""),
     detailLine3: text("detail_line_3").notNull().default(""),
     contactName: text("contact_name").notNull().default(""),
+    monthlyCreditLimit: integer("credit_limit").notNull().default(15_000_000),
+    sphCreditLimit: integer("sph_credit_limit").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

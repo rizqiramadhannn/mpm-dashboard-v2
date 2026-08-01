@@ -1,8 +1,8 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { getDb } from "../../../db";
-import { customers, sphDocuments, sphItems } from "../../../db/schema";
+import { customers, invoiceDocuments, sphDocuments, sphItems } from "../../../db/schema";
 import { listCustomers } from "../../customer/data";
 import { CreateSphForm } from "./CreateSphForm";
 
@@ -177,6 +177,113 @@ function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
   return sphDate;
 }
 
+function isUnpaidInvoice(status: string) {
+  return !["done", "cancelled"].includes(status);
+}
+
+function normalizedSphStatus(status: string) {
+  const aliases: Record<string, string> = {
+    cancelled: "cancel",
+    draft: "cek_harga",
+    invoiced: "menunggu_pengiriman",
+    pending_invoice: "menunggu_pengiriman",
+  };
+
+  return aliases[status] ?? status;
+}
+
+function isInvoiceEligibleSph(status: string) {
+  return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
+}
+
+function formatMoney(value: number) {
+  return `Rp ${new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(value)}`;
+}
+
+function isSameMonth(dateValue: string | null, monthKey: string) {
+  return Boolean(dateValue?.startsWith(monthKey));
+}
+
+async function getMonthlyOutstandingInvoiceAmount(customerId: string, monthKey: string) {
+  const db = await getDb();
+  const sphRows = await db
+    .select({
+      id: sphDocuments.id,
+      sphDate: sphDocuments.sphDate,
+      status: sphDocuments.status,
+      totalAmount: sphDocuments.totalAmount,
+    })
+    .from(sphDocuments)
+    .where(eq(sphDocuments.customerId, customerId));
+  const sphIds = sphRows.map((sph) => sph.id);
+
+  if (sphIds.length === 0) {
+    return 0;
+  }
+
+  const invoiceRows = await db
+    .select({
+      paidAmount: invoiceDocuments.paidAmount,
+      invoiceDate: invoiceDocuments.invoiceDate,
+      sphId: invoiceDocuments.sphId,
+      status: invoiceDocuments.status,
+      totalAmount: invoiceDocuments.totalAmount,
+    })
+    .from(invoiceDocuments)
+    .where(inArray(invoiceDocuments.sphId, sphIds));
+  const invoiceBySph = new Map(invoiceRows.map((invoice) => [invoice.sphId, invoice]));
+
+  return sphRows.reduce((sum, sph) => {
+    const invoice = invoiceBySph.get(sph.id);
+
+    if (invoice) {
+      return isUnpaidInvoice(invoice.status) && isSameMonth(invoice.invoiceDate, monthKey)
+        ? sum + Math.max(invoice.totalAmount - invoice.paidAmount, 0)
+        : sum;
+    }
+
+    return isInvoiceEligibleSph(sph.status) && isSameMonth(sph.sphDate, monthKey)
+      ? sum + sph.totalAmount
+      : sum;
+  }, 0);
+}
+
+async function assertCustomerWithinCreditLimits(customer: {
+  id: string;
+  monthlyCreditLimit: number;
+  name: string;
+  sphCreditLimit: number;
+}, sphDate: string, sphTotalAmount: number) {
+  if (customer.sphCreditLimit > 0 && sphTotalAmount > customer.sphCreditLimit) {
+    throw new Error(
+      `Tidak bisa membuat SPH baru untuk ${customer.name}. Total SPH ${formatMoney(
+        sphTotalAmount
+      )} melewati limit per SPH ${formatMoney(customer.sphCreditLimit)}.`
+    );
+  }
+
+  if (customer.monthlyCreditLimit === 0) {
+    return;
+  }
+
+  const outstandingAmount = await getMonthlyOutstandingInvoiceAmount(
+    customer.id,
+    sphDate.slice(0, 7)
+  );
+
+  if (outstandingAmount > customer.monthlyCreditLimit) {
+    throw new Error(
+      `Tidak bisa membuat SPH baru untuk ${customer.name}. Invoice belum lunas ${formatMoney(
+        outstandingAmount
+      )} bulan ini sudah melewati limit bulanan ${formatMoney(
+        customer.monthlyCreditLimit
+      )}.`
+    );
+  }
+}
+
 async function createSphAction(formData: FormData) {
   "use server";
 
@@ -247,6 +354,8 @@ async function createSphAction(formData: FormData) {
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
 
+  await assertCustomerWithinCreditLimits(customer, sphDate, totalAmount);
+
   const insertedSph = await db
     .insert(sphDocuments)
     .values({
@@ -297,11 +406,25 @@ export default async function CreateSphPage() {
     detailLine1: string;
     detailLine2: string;
     detailLine3: string;
+    contactName: string;
+    monthlyCreditLimit: number;
+    monthlyOutstandingInvoiceAmount?: number;
+    sphCreditLimit: number;
   }[] = [];
   let databaseError: string | null = null;
 
   try {
-    customerOptions = await listCustomers();
+    const customerRows = await listCustomers();
+    const todayMonthKey = new Date().toISOString().slice(0, 7);
+    customerOptions = await Promise.all(
+      customerRows.map(async (customer) => ({
+        ...customer,
+        monthlyOutstandingInvoiceAmount: await getMonthlyOutstandingInvoiceAmount(
+          customer.id,
+          todayMonthKey
+        ),
+      }))
+    );
   } catch (error) {
     databaseError = error instanceof Error ? error.message : "Database unavailable.";
   }

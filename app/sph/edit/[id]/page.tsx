@@ -164,6 +164,25 @@ function invoiceNoFromSph(sphNo: string) {
   return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
 }
 
+function formatMoney(value: number) {
+  return `Rp ${new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(value)}`;
+}
+
+function assertSphWithinCustomerLimit(customer: {
+  name: string;
+  sphCreditLimit: number;
+}, totalAmount: number) {
+  if (customer.sphCreditLimit > 0 && totalAmount > customer.sphCreditLimit) {
+    throw new Error(
+      `Tidak bisa menyimpan SPH untuk ${customer.name}. Total SPH ${formatMoney(
+        totalAmount
+      )} melewati limit per SPH ${formatMoney(customer.sphCreditLimit)}.`
+    );
+  }
+}
+
 async function updateSphAction(formData: FormData) {
   "use server";
 
@@ -237,6 +256,8 @@ async function updateSphAction(formData: FormData) {
 
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
+
+  assertSphWithinCustomerLimit(customer, totalAmount);
 
   await db
     .update(sphDocuments)

@@ -10,6 +10,9 @@ type CustomerOption = {
   detailLine1: string;
   detailLine2: string;
   detailLine3: string;
+  monthlyCreditLimit: number;
+  sphCreditLimit: number;
+  monthlyOutstandingInvoiceAmount?: number;
 };
 
 type CreateSphFormProps = {
@@ -63,6 +66,18 @@ export function CreateSphForm({
     () => customers.find((customer) => customer.id.toString() === selectedCustomerId),
     [customers, selectedCustomerId]
   );
+  const selectedCustomerOutstanding =
+    selectedCustomer?.monthlyOutstandingInvoiceAmount ?? 0;
+  const selectedCustomerOverLimit = selectedCustomer
+    ? selectedCustomer.monthlyCreditLimit > 0 &&
+      selectedCustomerOutstanding > selectedCustomer.monthlyCreditLimit
+    : false;
+
+  function formatMoney(value: number) {
+    return `Rp ${new Intl.NumberFormat("id-ID", {
+      maximumFractionDigits: 0,
+    }).format(value)}`;
+  }
 
   function addRow() {
     setRows((current) => [...current, { id: Date.now() }]);
@@ -90,7 +105,11 @@ export function CreateSphForm({
             <h1>{title}</h1>
             {initialValues?.sphNo ? <p className="form-subtitle">{initialValues.sphNo}</p> : null}
           </div>
-          <button className="primary-button" disabled={customers.length === 0} type="submit">
+          <button
+            className="primary-button"
+            disabled={customers.length === 0 || selectedCustomerOverLimit}
+            type="submit"
+          >
             {submitLabel}
           </button>
         </div>
@@ -162,11 +181,35 @@ export function CreateSphForm({
         </div>
 
         {selectedCustomer ? (
-          <div className="customer-preview">
+          <div
+            className={`customer-preview ${
+              selectedCustomerOverLimit ? "credit-over-limit" : ""
+            }`}
+          >
             <strong>{selectedCustomer.name}</strong>
             <span>{selectedCustomer.detailLine1 || "-"}</span>
             <span>{selectedCustomer.detailLine2 || "-"}</span>
             <span>{selectedCustomer.detailLine3 || "-"}</span>
+            <span>
+              Limit Bulanan:{" "}
+              {selectedCustomer.monthlyCreditLimit > 0
+                ? formatMoney(selectedCustomer.monthlyCreditLimit)
+                : "Tidak ada limit"}
+            </span>
+            <span>
+              Limit Per SPH:{" "}
+              {selectedCustomer.sphCreditLimit > 0
+                ? formatMoney(selectedCustomer.sphCreditLimit)
+                : "Tidak ada limit"}
+            </span>
+            <span>
+              Invoice Belum Lunas Bulan Ini: {formatMoney(selectedCustomerOutstanding)}
+            </span>
+            {selectedCustomerOverLimit ? (
+              <span className="credit-warning">
+                SPH baru diblokir sampai outstanding invoice bulan ini turun di bawah limit.
+              </span>
+            ) : null}
           </div>
         ) : null}
       </section>

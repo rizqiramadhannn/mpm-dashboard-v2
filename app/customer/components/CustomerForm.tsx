@@ -9,6 +9,8 @@ type CustomerRow = {
   detailLine2: string;
   detailLine3: string;
   contactName: string;
+  monthlyCreditLimit: number;
+  sphCreditLimit: number;
 };
 
 type CustomerFormProps = {
@@ -21,6 +23,12 @@ type CustomerFormProps = {
   pagination?: ReactNode;
   title?: string;
 };
+
+function formatMoney(value: number) {
+  return `Rp ${new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(value)}`;
+}
 
 export function CustomerForm({
   action,
@@ -112,6 +120,28 @@ export function CustomerForm({
             />
           </label>
 
+          <label>
+            <span>Limit Bulanan</span>
+            <input
+              name="monthlyCreditLimit"
+              required
+              defaultValue={customer?.monthlyCreditLimit ?? 15_000_000}
+              inputMode="numeric"
+              placeholder="15.000.000"
+            />
+          </label>
+
+          <label>
+            <span>Limit Per SPH</span>
+            <input
+              name="sphCreditLimit"
+              required
+              defaultValue={customer?.sphCreditLimit ?? 0}
+              inputMode="numeric"
+              placeholder="0"
+            />
+          </label>
+
           <button type="submit">{customer ? "Simpan customer" : "Buat customer"}</button>
         </ConfirmForm>
       ) : null}
@@ -129,6 +159,8 @@ export function CustomerForm({
                   <th>Detail 2</th>
                   <th>Detail 3</th>
                   <th>PIC</th>
+                  <th>Limit Bulanan</th>
+                  <th>Limit Per SPH</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -142,6 +174,12 @@ export function CustomerForm({
                       <td>{customer.detailLine2}</td>
                       <td>{customer.detailLine3}</td>
                       <td>{customer.contactName}</td>
+                      <td>{formatMoney(customer.monthlyCreditLimit)}</td>
+                      <td>
+                        {customer.sphCreditLimit > 0
+                          ? formatMoney(customer.sphCreditLimit)
+                          : "Tidak ada limit"}
+                      </td>
                       <td>
                         <div className="table-actions">
                           <a href={`/customer/edit-customer/${customer.id}`}>Edit</a>
@@ -151,7 +189,7 @@ export function CustomerForm({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7}>Tidak ada customer sesuai filter.</td>
+                    <td colSpan={9}>Tidak ada customer sesuai filter.</td>
                   </tr>
                 )}
               </tbody>

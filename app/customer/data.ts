@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { customers } from "../../db/schema";
 
+export const defaultMonthlyCreditLimit = 15_000_000;
+
 export const seededCustomers = [
   {
     code: "QLJ",
@@ -12,6 +14,8 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Tesha",
     contactName: "Ibu Tesha",
+    monthlyCreditLimit: defaultMonthlyCreditLimit,
+    sphCreditLimit: 0,
   },
   {
     code: "RDP",
@@ -20,6 +24,8 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tenggara",
     detailLine3: "Up Bapak Majid",
     contactName: "Bapak Majid",
+    monthlyCreditLimit: defaultMonthlyCreditLimit,
+    sphCreditLimit: 0,
   },
   {
     code: "AJB",
@@ -28,6 +34,8 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tenggara",
     detailLine3: "Up Ibu Rahba",
     contactName: "Ibu Rahba",
+    monthlyCreditLimit: defaultMonthlyCreditLimit,
+    sphCreditLimit: 0,
   },
   {
     code: "MPA",
@@ -36,6 +44,8 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Ayu",
     contactName: "Ibu Ayu",
+    monthlyCreditLimit: defaultMonthlyCreditLimit,
+    sphCreditLimit: 0,
   },
   {
     code: "MIM",
@@ -44,6 +54,8 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Linda",
     contactName: "Ibu Linda",
+    monthlyCreditLimit: defaultMonthlyCreditLimit,
+    sphCreditLimit: 0,
   },
 ];
 
@@ -60,6 +72,18 @@ function requiredString(formData: FormData, key: string) {
 function optionalString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+function parseRupiah(formData: FormData, key: string, fallback = 0) {
+  const value = formData.get(key);
+  const raw = typeof value === "string" ? value.replace(/[^\d]/g, "") : "";
+  const amount = raw ? Number(raw) : fallback;
+
+  if (!Number.isInteger(amount) || amount < 0) {
+    throw new Error(`${key} harus berupa angka valid.`);
+  }
+
+  return amount;
 }
 
 function parseId(formData: FormData) {
@@ -80,6 +104,12 @@ function customerValuesFromForm(formData: FormData) {
     detailLine2: requiredString(formData, "detailLine2"),
     detailLine3: optionalString(formData, "detailLine3"),
     contactName: optionalString(formData, "contactName"),
+    monthlyCreditLimit: parseRupiah(
+      formData,
+      "monthlyCreditLimit",
+      defaultMonthlyCreditLimit
+    ),
+    sphCreditLimit: parseRupiah(formData, "sphCreditLimit"),
   };
 }
 
@@ -94,7 +124,7 @@ export async function ensureSeedCustomers() {
       .limit(1);
 
     if (!existing) {
-      await db.insert(customers).values(customer);
+      await db.insert(customers).values(customer).onConflictDoNothing();
     }
   }
 }
@@ -112,6 +142,8 @@ export async function listCustomers() {
       detailLine2: customers.detailLine2,
       detailLine3: customers.detailLine3,
       contactName: customers.contactName,
+      monthlyCreditLimit: customers.monthlyCreditLimit,
+      sphCreditLimit: customers.sphCreditLimit,
     })
     .from(customers)
     .orderBy(asc(customers.name));
@@ -136,6 +168,8 @@ export async function getCustomer(id: string | number) {
       detailLine2: customers.detailLine2,
       detailLine3: customers.detailLine3,
       contactName: customers.contactName,
+      monthlyCreditLimit: customers.monthlyCreditLimit,
+      sphCreditLimit: customers.sphCreditLimit,
     })
     .from(customers)
     .where(eq(customers.id, customerId))

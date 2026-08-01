@@ -1543,6 +1543,16 @@ a {
   color: var(--foreground);
 }
 
+.customer-preview.credit-over-limit {
+  background: var(--primary-soft);
+  border-color: #f3b8b3;
+}
+
+.customer-preview .credit-warning {
+  color: var(--primary);
+  grid-column: 1 / -1;
+}
+
 .empty-state {
   color: var(--muted);
   font-size: 14px;

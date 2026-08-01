@@ -92,6 +92,20 @@
       "when": 1785589800000,
       "tag": "0016_invoice_payment_files",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1785601340088,
+      "tag": "0017_customer_credit_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1785686400000,
+      "tag": "0018_customer_sph_credit_limit",
+      "breakpoints": true
     }
   ]
 }
