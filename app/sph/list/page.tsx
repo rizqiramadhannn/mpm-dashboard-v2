@@ -5,7 +5,7 @@ import { AppShell } from "../../components/AppShell";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { getDb } from "../../../db";
-import { sphDocuments, sphItems } from "../../../db/schema";
+import { invoiceDocuments, invoiceItems, sphDocuments, sphItems } from "../../../db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -159,7 +159,20 @@ async function deleteSphAction(formData: FormData) {
 
   const sphId = idValue.trim();
   const db = await getDb();
+  const invoices = await db
+    .select({ id: invoiceDocuments.id })
+    .from(invoiceDocuments)
+    .where(eq(invoiceDocuments.sphId, sphId));
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+
+  if (invoiceIds.length > 0) {
+    await db.delete(invoiceItems).where(inArray(invoiceItems.invoiceId, invoiceIds));
+    await db.delete(invoiceDocuments).where(inArray(invoiceDocuments.id, invoiceIds));
+  }
+
   await db.delete(sphDocuments).where(inArray(sphDocuments.id, [sphId]));
+  revalidatePath("/dashboard");
+  revalidatePath("/invoice");
   revalidatePath("/sph/list");
 }
 
