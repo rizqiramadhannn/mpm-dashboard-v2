@@ -51,24 +51,6 @@ type MonthlyCashflow = {
   month: string;
 };
 
-type DashboardData = {
-  activities: string[];
-  cashflow: {
-    expense: number;
-    income: number;
-    net: number;
-  };
-  invoiceStatus: Array<{
-    label: string;
-    percent: string;
-  }>;
-  monthlyCashflow: MonthlyCashflow[];
-  period: string;
-  stats: Stat[];
-  topCustomers: RankingItem[];
-  topSuppliers: RankingItem[];
-};
-
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -191,88 +173,7 @@ function pushActivity(
   }
 }
 
-function getFallbackDashboardData(): DashboardData {
-  return {
-    activities: [
-      "SPH-2026-0718 dibuat untuk PT Armada Prima",
-      "INV-2026-1442 lunas dari Bengkel Sinar Teknik",
-      "Pengiriman INV-2026-1437 dijadwalkan sore ini",
-      "Stok fast moving filter solar masuk dari supplier",
-    ],
-    cashflow: {
-      expense: 315_200_000,
-      income: 428_500_000,
-      net: 113_300_000,
-    },
-    invoiceStatus: [
-      { label: "Lunas", percent: "68%" },
-      { label: "Belum Lunas", percent: "22%" },
-      { label: "Jatuh Tempo", percent: "10%" },
-    ],
-    monthlyCashflow: [
-      { month: "Jan", income: 310, expense: 226 },
-      { month: "Feb", income: 342, expense: 241 },
-      { month: "Mar", income: 368, expense: 252 },
-      { month: "Apr", income: 331, expense: 268 },
-      { month: "Mei", income: 392, expense: 281 },
-      { month: "Jun", income: 418, expense: 297 },
-      { month: "Jul", income: 428, expense: 315 },
-    ],
-    period: formatPeriod(new Date()),
-    stats: [
-      {
-        change: "+12,4%",
-        label: "Penjualan Bulan Ini",
-        tone: "positive",
-        value: "Rp 428,5 jt",
-      },
-      {
-        change: "18 invoice",
-        href: "/invoice?status=BELUM%20BAYAR",
-        label: "Invoice Belum Lunas",
-        tone: "warning",
-        value: "Rp 86,2 jt",
-      },
-      {
-        change: "9 menunggu follow up",
-        href: "/sph/list?status=active",
-        label: "SPH Aktif",
-        tone: "neutral",
-        value: "37",
-      },
-      {
-        change: "5 prioritas hari ini",
-        href: "/pengiriman?status=pending",
-        label: "Pengiriman Pending",
-        tone: "danger",
-        value: "14",
-      },
-      {
-        change: "7 nota belum lunas",
-        href: "/supplier/nota-supplier?payment=OUTSTANDING",
-        label: "Piutang ke Supplier",
-        tone: "warning",
-        value: "Rp 52,4 jt",
-      },
-    ],
-    topCustomers: [
-      { name: "PT Surya Motor Abadi", value: "Rp 78,4 jt", percent: 92 },
-      { name: "CV Mekar Jaya Diesel", value: "Rp 64,1 jt", percent: 75 },
-      { name: "Bengkel Sinar Teknik", value: "Rp 51,8 jt", percent: 61 },
-      { name: "PT Armada Prima", value: "Rp 44,6 jt", percent: 52 },
-      { name: "UD Lancar Sparepart", value: "Rp 39,2 jt", percent: 46 },
-    ],
-    topSuppliers: [
-      { name: "Astra Otoparts", value: "Rp 122 jt", percent: 89 },
-      { name: "Indoparts Mandiri", value: "Rp 96,3 jt", percent: 70 },
-      { name: "Sumber Bearing", value: "Rp 84,8 jt", percent: 62 },
-      { name: "Mega Filter Nusantara", value: "Rp 57,5 jt", percent: 42 },
-      { name: "Central Diesel Part", value: "Rp 48,7 jt", percent: 36 },
-    ],
-  };
-}
-
-async function getDashboardData(): Promise<DashboardData> {
+async function getDashboardData() {
   const db = await getDb();
   const now = new Date();
   const currentMonth = monthKey(now);
@@ -568,10 +469,7 @@ async function getDashboardData(): Promise<DashboardData> {
 }
 
 export default async function DashboardPage() {
-  const dashboard = await getDashboardData().catch((error) => {
-    console.error("Dashboard data unavailable, showing fallback data.", error);
-    return getFallbackDashboardData();
-  });
+  const dashboard = await getDashboardData();
   const maxCashflow = Math.max(
     1,
     ...dashboard.monthlyCashflow.flatMap((item) => [item.income, item.expense])
