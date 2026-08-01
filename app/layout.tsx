@@ -16,8 +16,8 @@ export const metadata: Metadata = {
   title: "MPM Sparepart Dashboard",
   description: "Dashboard penjualan sparepart untuk MPM.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/sph-assets/mpm-logo-source.png",
+    shortcut: "/sph-assets/mpm-logo-source.png",
   },
 };
 

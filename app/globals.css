@@ -1830,9 +1830,8 @@ a {
 }
 
 .batch-delete-button {
-  min-height: 34px;
-  padding: 7px 10px;
-  width: fit-content;
+  height: 30px;
+  width: 30px;
 }
 
 .shipment-item {
