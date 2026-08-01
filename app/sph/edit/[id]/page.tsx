@@ -278,7 +278,8 @@ async function updateSphAction(formData: FormData) {
     });
   const sphItemIdByLine = new Map(insertedItems.map((item) => [item.lineNo, item.id]));
 
-  const [existingInvoice] = await db
+  const invoiceNo = invoiceNoFromSph(existingSph.sphNo);
+  let [existingInvoice] = await db
     .select({
       id: invoiceDocuments.id,
       invoiceNo: invoiceDocuments.invoiceNo,
@@ -286,6 +287,17 @@ async function updateSphAction(formData: FormData) {
     .from(invoiceDocuments)
     .where(eq(invoiceDocuments.sphId, sphId))
     .limit(1);
+
+  if (!existingInvoice) {
+    [existingInvoice] = await db
+      .select({
+        id: invoiceDocuments.id,
+        invoiceNo: invoiceDocuments.invoiceNo,
+      })
+      .from(invoiceDocuments)
+      .where(eq(invoiceDocuments.invoiceNo, invoiceNo))
+      .limit(1);
+  }
 
   if (existingInvoice) {
     await db
@@ -298,9 +310,10 @@ async function updateSphAction(formData: FormData) {
         customerName: customer.name,
         franco,
         invoiceDate: sphDate,
-        invoiceNo: invoiceNoFromSph(existingSph.sphNo),
+        invoiceNo,
         paymentDueDate,
         paymentTerm,
+        sphId,
         totalAmount,
       })
       .where(eq(invoiceDocuments.id, existingInvoice.id));
@@ -319,11 +332,6 @@ async function updateSphAction(formData: FormData) {
       }))
     );
   } else {
-    const [document] = await db
-      .select({ sphNo: sphDocuments.sphNo })
-      .from(sphDocuments)
-      .where(eq(sphDocuments.id, sphId))
-      .limit(1);
     const insertedInvoice = await db
       .insert(invoiceDocuments)
       .values({
@@ -334,7 +342,7 @@ async function updateSphAction(formData: FormData) {
         customerName: customer.name,
         franco,
         invoiceDate: sphDate,
-        invoiceNo: invoiceNoFromSph(document?.sphNo ?? sphId),
+        invoiceNo,
         paymentDueDate,
         paymentTerm,
         sphId,
