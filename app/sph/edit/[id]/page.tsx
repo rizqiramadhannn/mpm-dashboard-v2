@@ -167,8 +167,8 @@ function invoiceNoFromSph(sphNo: string) {
 async function updateSphAction(formData: FormData) {
   "use server";
 
-  const sphId = requiredId(formData, "SPH");
-  const customerId = requiredId(formData, "Customer");
+  const sphId = requiredId(formData, "sphId");
+  const customerId = requiredId(formData, "customerId");
   const sphDate = requiredString(formData, "sphDate");
   const paymentTerm = requiredString(formData, "paymentTerm");
   const franco = requiredString(formData, "franco");
