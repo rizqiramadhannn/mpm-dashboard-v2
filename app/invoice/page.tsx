@@ -387,6 +387,7 @@ export default async function InvoicePage({
     itemIds.length > 0
       ? await db
           .select({
+            batchNo: shipmentJourneys.batchNo,
             shippingCost: shipmentJourneys.shippingCost,
             sphItemId: shipmentJourneys.sphItemId,
           })
@@ -394,13 +395,23 @@ export default async function InvoicePage({
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
   const ongkirBySph = new Map<string, number>();
+  const ongkirBatchCostBySph = new Map<string, number>();
 
   for (const journey of journeyRows) {
     const sphId = sphIdByItem.get(journey.sphItemId);
 
     if (sphId) {
-      ongkirBySph.set(sphId, (ongkirBySph.get(sphId) ?? 0) + journey.shippingCost);
+      const batchKey = `${sphId}:${journey.batchNo}`;
+      ongkirBatchCostBySph.set(
+        batchKey,
+        Math.max(ongkirBatchCostBySph.get(batchKey) ?? 0, journey.shippingCost)
+      );
     }
+  }
+
+  for (const [batchKey, shippingCost] of ongkirBatchCostBySph) {
+    const sphId = batchKey.split(":")[0];
+    ongkirBySph.set(sphId, (ongkirBySph.get(sphId) ?? 0) + shippingCost);
   }
 
   const ledgerRows: LedgerRow[] = invoiceEligibleSphRows.map((sph) => {

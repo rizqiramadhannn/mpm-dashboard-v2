@@ -1763,6 +1763,72 @@ a {
   justify-content: flex-end;
 }
 
+.shipment-batch-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+
+.shipment-batch-header {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.shipment-batch-header div,
+.shipment-batch-title {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.shipment-batch-header span,
+.shipment-batch-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.shipment-batch-header strong {
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+.shipment-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shipment-batch {
+  align-items: end;
+  background: #f8fafc;
+  border: 1px solid #e7ebf2;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  padding: 14px;
+}
+
+.shipment-batch-title strong {
+  align-items: center;
+  background: var(--foreground);
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 18px;
+  justify-content: center;
+  min-height: 42px;
+  width: 56px;
+}
+
 .shipment-item {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1818,6 +1884,10 @@ a {
 
 .shipment-grid.split-grid {
   grid-template-columns: minmax(88px, 0.5fr) repeat(3, minmax(0, 1fr));
+}
+
+.shipment-grid.batch-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(160px, 0.8fr) minmax(170px, 0.6fr);
 }
 
 .shipment-grid label {
@@ -1994,6 +2064,8 @@ a {
   .payment-request-form,
   .shipment-grid,
   .shipment-grid.split-grid,
+  .shipment-grid.batch-grid,
+  .shipment-batch,
   .shipment-item-summary {
     grid-template-columns: 1fr;
   }

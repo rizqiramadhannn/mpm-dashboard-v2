@@ -106,6 +106,13 @@
       "when": 1785686400000,
       "tag": "0018_customer_sph_credit_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1785772800000,
+      "tag": "0019_shipment_batch_no",
+      "breakpoints": true
     }
   ]
 }

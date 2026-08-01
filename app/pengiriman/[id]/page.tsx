@@ -17,6 +17,7 @@ type JourneyRow = {
   id: string;
   sphItemId: string;
   splitNo: number;
+  batchNo: number;
   quantity: number;
   supplyType: "stock" | "supplier";
   supplierId: string | null;
@@ -113,6 +114,10 @@ async function updateShipmentJourneyAction(formData: FormData) {
         latestStatus: customerReceived
           ? "TERKIRIM"
           : formText(formData, `latestStatus-${item.id}-${splitKey}`),
+        batchNo: parseInteger(
+          formData.get(`batchNo-${item.id}-${splitKey}`),
+          `Batch split ${index + 1}`
+        ),
         origin: formText(formData, `origin-${item.id}-${splitKey}`),
         quantity,
         shippingCost: parseInteger(
@@ -133,6 +138,31 @@ async function updateShipmentJourneyAction(formData: FormData) {
     }
 
     journeyValues.push(...journeys);
+  }
+
+  const batchDetails = new Map<
+    number,
+    { isShippingPaid: boolean; shippingCost: number; shippingVendor: string }
+  >();
+
+  for (const journey of journeyValues) {
+    const current = batchDetails.get(journey.batchNo ?? 1);
+
+    batchDetails.set(journey.batchNo ?? 1, {
+      isShippingPaid: Boolean(current?.isShippingPaid || journey.isShippingPaid),
+      shippingCost: Math.max(current?.shippingCost ?? 0, journey.shippingCost ?? 0),
+      shippingVendor: current?.shippingVendor || journey.shippingVendor || "",
+    });
+  }
+
+  for (const journey of journeyValues) {
+    const batch = batchDetails.get(journey.batchNo ?? 1);
+
+    if (batch) {
+      journey.isShippingPaid = batch.isShippingPaid;
+      journey.shippingCost = batch.shippingCost;
+      journey.shippingVendor = batch.shippingVendor;
+    }
   }
 
   await db.delete(shipmentJourneys).where(inArray(shipmentJourneys.sphItemId, itemIds));
@@ -240,6 +270,7 @@ export default async function PengirimanDetailPage({
             id: shipmentJourneys.id,
             sphItemId: shipmentJourneys.sphItemId,
             splitNo: shipmentJourneys.splitNo,
+            batchNo: shipmentJourneys.batchNo,
             quantity: shipmentJourneys.quantity,
             supplyType: shipmentJourneys.supplyType,
             supplierId: shipmentJourneys.supplierId,

@@ -20,6 +20,7 @@ type ShipmentItem = {
 type JourneySplit = {
   id: string;
   splitNo: number;
+  batchNo: number;
   quantity: number;
   supplyType: "stock" | "supplier";
   supplierId: string | null;
@@ -50,11 +51,19 @@ type SplitRow = JourneySplit & {
   rowKey: string;
 };
 
+type ShipmentBatch = {
+  batchNo: number;
+  shippingVendor: string;
+  shippingCost: number;
+  isShippingPaid: boolean;
+};
+
 function createSplit(itemId: string, splitNo: number, destinationFallback: string): SplitRow {
   return {
     destination: destinationFallback,
     id: "",
     latestStatus: "",
+    batchNo: 1,
     origin: "",
     quantity: 0,
     rowKey: `new_${itemId}_${splitNo}`,
@@ -74,6 +83,33 @@ function supplyValue(split: SplitRow) {
   }
 
   return "stock";
+}
+
+function deriveBatches(rowsByItem: Record<string, SplitRow[]>) {
+  const batches = new Map<number, ShipmentBatch>();
+
+  for (const split of Object.values(rowsByItem).flat()) {
+    const batchNo = split.batchNo || 1;
+    const current = batches.get(batchNo);
+
+    batches.set(batchNo, {
+      batchNo,
+      isShippingPaid: current?.isShippingPaid || split.isShippingPaid,
+      shippingCost: Math.max(current?.shippingCost ?? 0, split.shippingCost || 0),
+      shippingVendor: current?.shippingVendor || split.shippingVendor || "",
+    });
+  }
+
+  if (batches.size === 0) {
+    batches.set(1, {
+      batchNo: 1,
+      isShippingPaid: false,
+      shippingCost: 0,
+      shippingVendor: "",
+    });
+  }
+
+  return Array.from(batches.values()).sort((a, b) => a.batchNo - b.batchNo);
 }
 
 export function ShipmentJourneyForm({
@@ -112,6 +148,11 @@ export function ShipmentJourneyForm({
     return rowsByItem;
   }, [destinationFallback, items, journeysByItem]);
   const [rowsByItem, setRowsByItem] = useState(initialRows);
+  const [batches, setBatches] = useState(() => deriveBatches(initialRows));
+  const sortedBatches = useMemo(
+    () => [...batches].sort((a, b) => a.batchNo - b.batchNo),
+    [batches]
+  );
 
   function addSplit(item: ShipmentItem) {
     setRowsByItem((current) => {
@@ -161,6 +202,51 @@ export function ShipmentJourneyForm({
     }));
   }
 
+  function addBatch() {
+    setBatches((current) => {
+      const nextBatchNo =
+        current.reduce((highest, batch) => Math.max(highest, batch.batchNo), 0) + 1;
+
+      return [
+        ...current,
+        {
+          batchNo: nextBatchNo,
+          isShippingPaid: false,
+          shippingCost: 0,
+          shippingVendor: "",
+        },
+      ];
+    });
+  }
+
+  function updateBatch(batchNo: number, patch: Partial<Omit<ShipmentBatch, "batchNo">>) {
+    setBatches((current) =>
+      current.map((batch) => (batch.batchNo === batchNo ? { ...batch, ...patch } : batch))
+    );
+    setRowsByItem((current) => {
+      const nextRows: Record<string, SplitRow[]> = {};
+
+      for (const [itemId, rows] of Object.entries(current)) {
+        nextRows[itemId] = rows.map((split) =>
+          split.batchNo === batchNo && !split.customerReceived ? { ...split, ...patch } : split
+        );
+      }
+
+      return nextRows;
+    });
+  }
+
+  function assignBatch(itemId: string, rowKey: string, batchNo: number) {
+    const batch = batches.find((candidate) => candidate.batchNo === batchNo);
+
+    updateSplit(itemId, rowKey, {
+      batchNo,
+      isShippingPaid: batch?.isShippingPaid ?? false,
+      shippingCost: batch?.shippingCost ?? 0,
+      shippingVendor: batch?.shippingVendor ?? "",
+    });
+  }
+
   function updateSupply(itemId: string, rowKey: string, value: string) {
     if (value.startsWith("supplier:")) {
       updateSplit(itemId, rowKey, {
@@ -199,6 +285,7 @@ export function ShipmentJourneyForm({
           value={split.destination || destinationFallback}
         />
         <input name={`latestStatus-${item.id}-${split.rowKey}`} type="hidden" value="TERKIRIM" />
+        <input name={`batchNo-${item.id}-${split.rowKey}`} type="hidden" value={split.batchNo} />
         <input
           name={`shippingVendor-${item.id}-${split.rowKey}`}
           type="hidden"
@@ -247,6 +334,67 @@ export function ShipmentJourneyForm({
         </div>
       </section>
 
+      <section className="shipment-batch-section">
+        <div className="shipment-batch-header">
+          <div>
+            <span>Batch Pengiriman</span>
+            <strong>Ongkir diisi satu kali per batch</strong>
+          </div>
+          <button className="secondary-button" onClick={addBatch} type="button">
+            Tambah Batch
+          </button>
+        </div>
+
+        <div className="shipment-batch-list">
+          {sortedBatches.map((batch) => (
+            <div className="shipment-batch" key={batch.batchNo}>
+              <div className="shipment-batch-title">
+                <span>Batch</span>
+                <strong>{batch.batchNo}</strong>
+              </div>
+              <div className="shipment-grid batch-grid">
+                <label>
+                  <span>Vendor Pengiriman</span>
+                  <input
+                    onChange={(event) =>
+                      updateBatch(batch.batchNo, { shippingVendor: event.target.value })
+                    }
+                    placeholder="Nama vendor / ekspedisi"
+                    value={batch.shippingVendor}
+                  />
+                </label>
+
+                <label>
+                  <span>Biaya Kirim</span>
+                  <input
+                    min="0"
+                    onChange={(event) =>
+                      updateBatch(batch.batchNo, {
+                        shippingCost: Number(event.target.value) || 0,
+                      })
+                    }
+                    placeholder="0"
+                    type="number"
+                    value={batch.shippingCost || ""}
+                  />
+                </label>
+
+                <label className="checkbox-field">
+                  <input
+                    checked={batch.isShippingPaid}
+                    onChange={(event) =>
+                      updateBatch(batch.batchNo, { isShippingPaid: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                  <span>Sudah dibayar</span>
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="shipment-journey-list">
         {items.length > 0 ? (
           items.map((item) => {
@@ -286,6 +434,27 @@ export function ShipmentJourneyForm({
                         type="hidden"
                         value={split.rowKey}
                       />
+                      {!split.customerReceived ? (
+                        <>
+                          <input
+                            name={`shippingVendor-${item.id}-${split.rowKey}`}
+                            type="hidden"
+                            value={split.shippingVendor}
+                          />
+                          <input
+                            name={`shippingCost-${item.id}-${split.rowKey}`}
+                            type="hidden"
+                            value={split.shippingCost}
+                          />
+                          {split.isShippingPaid ? (
+                            <input
+                              name={`isShippingPaid-${item.id}-${split.rowKey}`}
+                              type="hidden"
+                              value="on"
+                            />
+                          ) : null}
+                        </>
+                      ) : null}
                       <div className="split-heading">
                         <strong>Split {index + 1}</strong>
                         <button
@@ -338,6 +507,28 @@ export function ShipmentJourneyForm({
                         </label>
 
                         <label>
+                          <span>Batch Pengiriman</span>
+                          <select
+                            disabled={split.customerReceived}
+                            name={`batchNo-${item.id}-${split.rowKey}`}
+                            onChange={(event) =>
+                              assignBatch(
+                                item.id,
+                                split.rowKey,
+                                Number(event.target.value) || 1
+                              )
+                            }
+                            value={split.batchNo || 1}
+                          >
+                            {sortedBatches.map((batch) => (
+                              <option key={batch.batchNo} value={batch.batchNo}>
+                                Batch {batch.batchNo}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label>
                           <span>Asal</span>
                           <input
                             disabled={split.customerReceived}
@@ -380,53 +571,6 @@ export function ShipmentJourneyForm({
                             placeholder="Transit, menunggu driver, sampai"
                             value={split.latestStatus}
                           />
-                        </label>
-
-                        <label>
-                          <span>Vendor Pengiriman</span>
-                          <input
-                            disabled={split.customerReceived}
-                            name={`shippingVendor-${item.id}-${split.rowKey}`}
-                            onChange={(event) =>
-                              updateSplit(item.id, split.rowKey, {
-                                shippingVendor: event.target.value,
-                              })
-                            }
-                            placeholder="Nama vendor / ekspedisi"
-                            value={split.shippingVendor}
-                          />
-                        </label>
-
-                        <label>
-                          <span>Biaya Kirim</span>
-                          <input
-                            disabled={split.customerReceived}
-                            min="0"
-                            name={`shippingCost-${item.id}-${split.rowKey}`}
-                            onChange={(event) =>
-                              updateSplit(item.id, split.rowKey, {
-                                shippingCost: Number(event.target.value) || 0,
-                              })
-                            }
-                            placeholder="0"
-                            type="number"
-                            value={split.shippingCost || ""}
-                          />
-                        </label>
-
-                        <label className="checkbox-field">
-                          <input
-                            disabled={split.customerReceived}
-                            name={`isShippingPaid-${item.id}-${split.rowKey}`}
-                            onChange={(event) =>
-                              updateSplit(item.id, split.rowKey, {
-                                isShippingPaid: event.target.checked,
-                              })
-                            }
-                            type="checkbox"
-                            checked={split.isShippingPaid}
-                          />
-                          <span>Sudah dibayar</span>
                         </label>
 
                         <label className="checkbox-field">

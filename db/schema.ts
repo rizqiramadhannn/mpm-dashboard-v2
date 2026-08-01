@@ -113,6 +113,7 @@ export const shipmentJourneys = sqliteTable(
       .notNull()
       .references(() => sphItems.id, { onDelete: "cascade" }),
     splitNo: integer("split_no").notNull().default(1),
+    batchNo: integer("batch_no").notNull().default(1),
     quantity: integer("quantity").notNull().default(0),
     supplyType: text("supply_type", {
       enum: ["stock", "supplier"],

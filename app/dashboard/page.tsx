@@ -230,6 +230,7 @@ async function getDashboardData() {
         .innerJoin(suppliers, eq(supplierNotes.supplierId, suppliers.id)),
       db
         .select({
+          batchNo: shipmentJourneys.batchNo,
           createdAt: shipmentJourneys.createdAt,
           isShippingPaid: shipmentJourneys.isShippingPaid,
           latestStatus: shipmentJourneys.latestStatus,
@@ -249,6 +250,28 @@ async function getDashboardData() {
   const invoices = rawInvoices.filter((invoice) => validSphIds.has(invoice.sphId));
   const sphIdByItem = new Map(sphItemRows.map((item) => [item.id, item.sphId]));
   const sphByInternalId = new Map(sphRows.map((sph) => [sph.id, sph]));
+  const shipmentBatchTotal = (
+    predicate: (shipment: (typeof shipmentRows)[number]) => boolean
+  ) => {
+    const batchCosts = new Map<string, number>();
+
+    for (const shipment of shipmentRows) {
+      if (!predicate(shipment)) {
+        continue;
+      }
+
+      const sphId = sphIdByItem.get(shipment.sphItemId);
+
+      if (!sphId) {
+        continue;
+      }
+
+      const batchKey = `${sphId}:${shipment.batchNo}`;
+      batchCosts.set(batchKey, Math.max(batchCosts.get(batchKey) ?? 0, shipment.shippingCost));
+    }
+
+    return Array.from(batchCosts.values()).reduce((sum, cost) => sum + cost, 0);
+  };
 
   const invoiceThisMonth = invoices.filter(
     (invoice) =>
@@ -334,9 +357,9 @@ async function getDashboardData() {
           isWithinMonth(note.noteDate, key)
       )
       .reduce((sum, note) => sum + note.amount, 0);
-    const shippingExpense = shipmentRows
-      .filter((shipment) => isWithinMonth(shipment.createdAt, key))
-      .reduce((sum, shipment) => sum + shipment.shippingCost, 0);
+    const shippingExpense = shipmentBatchTotal((shipment) =>
+      isWithinMonth(shipment.createdAt, key)
+    );
 
     return {
       expense: Math.round((supplierExpense + shippingExpense) / 1_000_000),
@@ -353,9 +376,7 @@ async function getDashboardData() {
           isWithinMonth(note.noteDate, currentMonth)
       )
       .reduce((sum, note) => sum + note.amount, 0) +
-    shipmentRows
-      .filter((shipment) => isWithinMonth(shipment.createdAt, currentMonth))
-      .reduce((sum, shipment) => sum + shipment.shippingCost, 0);
+    shipmentBatchTotal((shipment) => isWithinMonth(shipment.createdAt, currentMonth));
 
   const paidInvoiceCount = invoices.filter((invoice) => isInvoicePaid(invoice.status)).length;
   const cancelledInvoiceCount = invoices.filter((invoice) =>
