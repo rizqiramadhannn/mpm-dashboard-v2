@@ -153,6 +153,21 @@ export function ShipmentJourneyForm({
     () => [...batches].sort((a, b) => a.batchNo - b.batchNo),
     [batches]
   );
+  const batchUsageByNo = useMemo(() => {
+    const usage = new Map<number, { receivedCount: number; totalCount: number }>();
+
+    for (const split of Object.values(rowsByItem).flat()) {
+      const batchNo = split.batchNo || 1;
+      const current = usage.get(batchNo) ?? { receivedCount: 0, totalCount: 0 };
+
+      usage.set(batchNo, {
+        receivedCount: current.receivedCount + (split.customerReceived ? 1 : 0),
+        totalCount: current.totalCount + 1,
+      });
+    }
+
+    return usage;
+  }, [rowsByItem]);
 
   function addSplit(item: ShipmentItem) {
     setRowsByItem((current) => {
@@ -216,6 +231,54 @@ export function ShipmentJourneyForm({
           shippingVendor: "",
         },
       ];
+    });
+  }
+
+  function removeBatch(batchNo: number) {
+    if (batches.length <= 1) {
+      return;
+    }
+
+    const usage = batchUsageByNo.get(batchNo);
+
+    if (usage?.receivedCount) {
+      return;
+    }
+
+    const fallbackBatch = sortedBatches.find((batch) => batch.batchNo !== batchNo);
+
+    if (!fallbackBatch) {
+      return;
+    }
+
+    if (
+      usage?.totalCount &&
+      !window.confirm(
+        `Batch ${batchNo} sedang dipakai ${usage.totalCount} split. Pindahkan ke Batch ${fallbackBatch.batchNo}?`
+      )
+    ) {
+      return;
+    }
+
+    setBatches((current) => current.filter((batch) => batch.batchNo !== batchNo));
+    setRowsByItem((current) => {
+      const nextRows: Record<string, SplitRow[]> = {};
+
+      for (const [itemId, rows] of Object.entries(current)) {
+        nextRows[itemId] = rows.map((split) =>
+          split.batchNo === batchNo
+            ? {
+                ...split,
+                batchNo: fallbackBatch.batchNo,
+                isShippingPaid: fallbackBatch.isShippingPaid,
+                shippingCost: fallbackBatch.shippingCost,
+                shippingVendor: fallbackBatch.shippingVendor,
+              }
+            : split
+        );
+      }
+
+      return nextRows;
     });
   }
 
@@ -346,52 +409,70 @@ export function ShipmentJourneyForm({
         </div>
 
         <div className="shipment-batch-list">
-          {sortedBatches.map((batch) => (
-            <div className="shipment-batch" key={batch.batchNo}>
-              <div className="shipment-batch-title">
-                <span>Batch</span>
-                <strong>{batch.batchNo}</strong>
-              </div>
-              <div className="shipment-grid batch-grid">
-                <label>
-                  <span>Vendor Pengiriman</span>
-                  <input
-                    onChange={(event) =>
-                      updateBatch(batch.batchNo, { shippingVendor: event.target.value })
-                    }
-                    placeholder="Nama vendor / ekspedisi"
-                    value={batch.shippingVendor}
-                  />
-                </label>
+          {sortedBatches.map((batch) => {
+            const usage = batchUsageByNo.get(batch.batchNo);
+            const deleteDisabled = sortedBatches.length <= 1 || Boolean(usage?.receivedCount);
 
-                <label>
-                  <span>Biaya Kirim</span>
-                  <input
-                    min="0"
-                    onChange={(event) =>
-                      updateBatch(batch.batchNo, {
-                        shippingCost: Number(event.target.value) || 0,
-                      })
+            return (
+              <div className="shipment-batch" key={batch.batchNo}>
+                <div className="shipment-batch-title">
+                  <span>Batch</span>
+                  <strong>{batch.batchNo}</strong>
+                  <button
+                    className="secondary-button batch-delete-button"
+                    disabled={deleteDisabled}
+                    onClick={() => removeBatch(batch.batchNo)}
+                    title={
+                      usage?.receivedCount
+                        ? "Batch berisi split yang sudah diterima customer"
+                        : "Hapus batch"
                     }
-                    placeholder="0"
-                    type="number"
-                    value={batch.shippingCost || ""}
-                  />
-                </label>
+                    type="button"
+                  >
+                    Hapus
+                  </button>
+                </div>
+                <div className="shipment-grid batch-grid">
+                  <label>
+                    <span>Vendor Pengiriman</span>
+                    <input
+                      onChange={(event) =>
+                        updateBatch(batch.batchNo, { shippingVendor: event.target.value })
+                      }
+                      placeholder="Nama vendor / ekspedisi"
+                      value={batch.shippingVendor}
+                    />
+                  </label>
 
-                <label className="checkbox-field">
-                  <input
-                    checked={batch.isShippingPaid}
-                    onChange={(event) =>
-                      updateBatch(batch.batchNo, { isShippingPaid: event.target.checked })
-                    }
-                    type="checkbox"
-                  />
-                  <span>Sudah dibayar</span>
-                </label>
+                  <label>
+                    <span>Biaya Kirim</span>
+                    <input
+                      min="0"
+                      onChange={(event) =>
+                        updateBatch(batch.batchNo, {
+                          shippingCost: Number(event.target.value) || 0,
+                        })
+                      }
+                      placeholder="0"
+                      type="number"
+                      value={batch.shippingCost || ""}
+                    />
+                  </label>
+
+                  <label className="checkbox-field">
+                    <input
+                      checked={batch.isShippingPaid}
+                      onChange={(event) =>
+                        updateBatch(batch.batchNo, { isShippingPaid: event.target.checked })
+                      }
+                      type="checkbox"
+                    />
+                    <span>Sudah dibayar</span>
+                  </label>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

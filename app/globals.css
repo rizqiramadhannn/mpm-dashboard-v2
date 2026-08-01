@@ -1829,6 +1829,12 @@ a {
   width: 56px;
 }
 
+.batch-delete-button {
+  min-height: 34px;
+  padding: 7px 10px;
+  width: fit-content;
+}
+
 .shipment-item {
   background: var(--panel);
   border: 1px solid var(--line);
