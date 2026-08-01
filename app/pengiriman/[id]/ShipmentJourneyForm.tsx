@@ -415,23 +415,23 @@ export function ShipmentJourneyForm({
 
             return (
               <div className="shipment-batch" key={batch.batchNo}>
+                <button
+                  className="icon-button batch-delete-button"
+                  disabled={deleteDisabled}
+                  onClick={() => removeBatch(batch.batchNo)}
+                  aria-label={`Hapus batch ${batch.batchNo}`}
+                  title={
+                    usage?.receivedCount
+                      ? "Batch berisi split yang sudah diterima customer"
+                      : "Hapus batch"
+                  }
+                  type="button"
+                >
+                  x
+                </button>
                 <div className="shipment-batch-title">
                   <span>Batch</span>
                   <strong>{batch.batchNo}</strong>
-                  <button
-                    className="icon-button batch-delete-button"
-                    disabled={deleteDisabled}
-                    onClick={() => removeBatch(batch.batchNo)}
-                    aria-label={`Hapus batch ${batch.batchNo}`}
-                    title={
-                      usage?.receivedCount
-                        ? "Batch berisi split yang sudah diterima customer"
-                        : "Hapus batch"
-                    }
-                    type="button"
-                  >
-                    x
-                  </button>
                 </div>
                 <div className="shipment-grid batch-grid">
                   <label>

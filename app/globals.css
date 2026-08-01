@@ -1814,7 +1814,8 @@ a {
   display: grid;
   gap: 14px;
   grid-template-columns: 92px minmax(0, 1fr);
-  padding: 14px;
+  padding: 14px 48px 14px 14px;
+  position: relative;
 }
 
 .shipment-batch-title strong {
@@ -1831,6 +1832,9 @@ a {
 
 .batch-delete-button {
   height: 30px;
+  position: absolute;
+  right: 10px;
+  top: 10px;
   width: 30px;
 }
 
