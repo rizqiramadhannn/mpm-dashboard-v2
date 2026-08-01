@@ -9,26 +9,25 @@ type NavItem = {
   href: string;
 };
 
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "List Invoice", href: "/invoice" },
-  { label: "Pengiriman", href: "/pengiriman" },
-];
-
 const sphItems: NavItem[] = [
-  { label: "Create SPH", href: "/sph/create" },
-  { label: "List SPH", href: "/sph/list" },
+  { label: "CREATE SPH", href: "/sph/create" },
+  { label: "LIST SPH", href: "/sph/list" },
 ];
 
 const customerItems: NavItem[] = [
-  { label: "Add new customer", href: "/customer/add-new-customer" },
-  { label: "Customer list", href: "/customer/customer-list" },
+  { label: "ADD NEW CUSTOMER", href: "/customer/add-new-customer" },
+  { label: "CUSTOMER LIST", href: "/customer/customer-list" },
 ];
 
 const supplierItems: NavItem[] = [
-  { label: "Add new supplier", href: "/supplier/add-new-supplier" },
-  { label: "List supplier", href: "/supplier/supplier-list" },
-  { label: "List nota supplier", href: "/supplier/nota-supplier" },
+  { label: "ADD NEW SUPPLIER", href: "/supplier/add-new-supplier" },
+  { label: "LIST SUPPLIER", href: "/supplier/supplier-list" },
+  { label: "LIST NOTA SUPPLIER", href: "/supplier/nota-supplier" },
+];
+
+const assetItems: NavItem[] = [
+  { label: "ADD NEW ASSET", href: "/asset/add-new-asset" },
+  { label: "ASSET LIST", href: "/asset/asset-list" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -40,30 +39,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sphActive = pathname.startsWith("/sph");
   const customerActive = pathname.startsWith("/customer");
   const supplierActive = pathname.startsWith("/supplier");
+  const assetActive = pathname.startsWith("/asset");
 
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Main navigation">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
-            M
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt=""
+              src="/sph-assets/mpm-logo-source.png"
+            />
           </div>
           <div>
-            <p className="brand-title">MPM Sparepart</p>
-            <p className="brand-subtitle">Sales Dashboard</p>
+            <p className="brand-title">MOROWALI PUTRA MANDIRI</p>
+            <p className="brand-subtitle">General Trading</p>
           </div>
         </div>
 
         <nav className="nav-list">
-          {navItems.slice(0, 1).map((item) => (
-            <Link
-              className={`nav-link ${isActive(pathname, item.href) ? "active" : ""}`}
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
+          <Link
+            className={`nav-link ${isActive(pathname, "/dashboard") ? "active" : ""}`}
+            href="/dashboard"
+          >
+            DASHBOARD
+          </Link>
 
           <div className="nav-group">
             <div className={`nav-group-label ${sphActive ? "active" : ""}`}>SPH</div>
@@ -80,20 +81,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="nav-group">
-            <div className={`nav-group-label ${customerActive ? "active" : ""}`}>Customer</div>
-            <div className="nav-children">
-              {customerItems.map((item) => (
-                <Link
-                  className={`nav-link child ${isActive(pathname, item.href) ? "active" : ""}`}
-                  href={item.href}
-                  key={item.href}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          </div>
+          <Link
+            className={`nav-link ${isActive(pathname, "/pengiriman") ? "active" : ""}`}
+            href="/pengiriman"
+          >
+            PENGIRIMAN
+          </Link>
 
           <div className="nav-group">
             <div className={`nav-group-label ${supplierActive ? "active" : ""}`}>
@@ -112,15 +105,49 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          {navItems.slice(1).map((item) => (
-            <Link
-              className={`nav-link ${isActive(pathname, item.href) ? "active" : ""}`}
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
+          <div className="nav-group">
+            <div className={`nav-group-label ${customerActive ? "active" : ""}`}>CUSTOMER</div>
+            <div className="nav-children">
+              {customerItems.map((item) => (
+                <Link
+                  className={`nav-link child ${isActive(pathname, item.href) ? "active" : ""}`}
+                  href={item.href}
+                  key={item.href}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <Link
+            className={`nav-link ${isActive(pathname, "/invoice") ? "active" : ""}`}
+            href="/invoice"
+          >
+            INVOICE
+          </Link>
+
+          <Link
+            className={`nav-link ${isActive(pathname, "/payment-request") ? "active" : ""}`}
+            href="/payment-request"
+          >
+            PAYMENT REQUEST
+          </Link>
+
+          <div className="nav-group">
+            <div className={`nav-group-label ${assetActive ? "active" : ""}`}>ASSET</div>
+            <div className="nav-children">
+              {assetItems.map((item) => (
+                <Link
+                  className={`nav-link child ${isActive(pathname, item.href) ? "active" : ""}`}
+                  href={item.href}
+                  key={item.href}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </nav>
       </aside>
 

@@ -1,5 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
-import Link from "next/link";
+import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
@@ -10,17 +9,23 @@ import {
   sphDocuments,
   sphItems,
 } from "../../../db/schema";
+import { ShipmentJourneyForm } from "./ShipmentJourneyForm";
 
 export const dynamic = "force-dynamic";
 
 type JourneyRow = {
-  id: number;
-  sphItemId: number;
+  id: string;
+  sphItemId: string;
+  splitNo: number;
+  quantity: number;
   supplyType: "stock" | "supplier";
-  supplierId: number | null;
+  supplierId: string | null;
   origin: string;
   destination: string;
   latestStatus: string;
+  shippingVendor: string;
+  shippingCost: number;
+  isShippingPaid: boolean;
 };
 
 function formText(formData: FormData, key: string) {
@@ -30,9 +35,9 @@ function formText(formData: FormData, key: string) {
 
 function parseSupply(value: string) {
   if (value.startsWith("supplier:")) {
-    const supplierId = Number(value.replace("supplier:", ""));
+    const supplierId = value.replace("supplier:", "").trim();
 
-    if (Number.isInteger(supplierId) && supplierId > 0) {
+    if (supplierId) {
       return { supplierId, supplyType: "supplier" as const };
     }
   }
@@ -40,19 +45,31 @@ function parseSupply(value: string) {
   return { supplierId: null, supplyType: "stock" as const };
 }
 
+function parseInteger(value: FormDataEntryValue | null, key: string) {
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${key} harus berupa angka valid.`);
+  }
+
+  return parsed;
+}
+
 async function updateShipmentJourneyAction(formData: FormData) {
   "use server";
 
-  const sphId = Number(formData.get("sphId"));
+  const sphIdValue = formData.get("sphId");
 
-  if (!Number.isInteger(sphId) || sphId <= 0) {
+  if (typeof sphIdValue !== "string" || sphIdValue.trim() === "") {
     throw new Error("SPH tidak valid.");
   }
 
+  const sphId = sphIdValue.trim();
   const db = await getDb();
   const itemRows = await db
     .select({
       id: sphItems.id,
+      quantity: sphItems.quantity,
     })
     .from(sphItems)
     .where(eq(sphItems.sphId, sphId));
@@ -62,56 +79,53 @@ async function updateShipmentJourneyAction(formData: FormData) {
   }
 
   const itemIds = itemRows.map((item) => item.id);
-  const existingRows = await db
-    .select({
-      id: shipmentJourneys.id,
-      sphItemId: shipmentJourneys.sphItemId,
-    })
-    .from(shipmentJourneys)
-    .where(inArray(shipmentJourneys.sphItemId, itemIds));
-  const journeyIdByItem = new Map(
-    existingRows.map((journey) => [journey.sphItemId, journey.id])
-  );
+  const journeyValues: (typeof shipmentJourneys.$inferInsert)[] = [];
 
   for (const item of itemRows) {
-    const supply = parseSupply(formText(formData, `supply-${item.id}`));
-    const values = {
-      destination: formText(formData, `destination-${item.id}`),
-      latestStatus: formText(formData, `latestStatus-${item.id}`),
-      origin: formText(formData, `origin-${item.id}`),
-      supplierId: supply.supplierId,
-      supplyType: supply.supplyType,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    };
-    const journeyId = journeyIdByItem.get(item.id);
+    const splitKeys = formData
+      .getAll(`splitKey-${item.id}`)
+      .filter((value): value is string => typeof value === "string");
+    const journeys = splitKeys.map((splitKey, index) => {
+      const quantity = parseInteger(
+        formData.get(`quantity-${item.id}-${splitKey}`),
+        `Qty split ${index + 1}`
+      );
+      const supply = parseSupply(formText(formData, `supply-${item.id}-${splitKey}`));
 
-    if (journeyId) {
-      await db
-        .update(shipmentJourneys)
-        .set(values)
-        .where(eq(shipmentJourneys.id, journeyId));
-    } else {
-      await db.insert(shipmentJourneys).values({
-        ...values,
+      return {
+        destination: formText(formData, `destination-${item.id}-${splitKey}`),
+        isShippingPaid: formData.get(`isShippingPaid-${item.id}-${splitKey}`) === "on",
+        latestStatus: formText(formData, `latestStatus-${item.id}-${splitKey}`),
+        origin: formText(formData, `origin-${item.id}-${splitKey}`),
+        quantity,
+        shippingCost: parseInteger(
+          formData.get(`shippingCost-${item.id}-${splitKey}`),
+          `Biaya kirim split ${index + 1}`
+        ),
+        shippingVendor: formText(formData, `shippingVendor-${item.id}-${splitKey}`),
         sphItemId: item.id,
-      });
+        splitNo: index + 1,
+        supplierId: supply.supplierId,
+        supplyType: supply.supplyType,
+      };
+    });
+    const totalSplitQty = journeys.reduce((total, journey) => total + journey.quantity, 0);
+
+    if (totalSplitQty > item.quantity) {
+      throw new Error(`Total split item ${item.id} melebihi qty SPH.`);
     }
+
+    journeyValues.push(...journeys);
+  }
+
+  await db.delete(shipmentJourneys).where(inArray(shipmentJourneys.sphItemId, itemIds));
+
+  if (journeyValues.length > 0) {
+    await db.insert(shipmentJourneys).values(journeyValues);
   }
 
   revalidatePath("/pengiriman");
   revalidatePath(`/pengiriman/${sphId}`);
-}
-
-function formatSupply(journey: JourneyRow | undefined, supplierNameById: Map<number, string>) {
-  if (!journey) {
-    return "Stok";
-  }
-
-  if (journey.supplyType === "supplier" && journey.supplierId) {
-    return supplierNameById.get(journey.supplierId) ?? "Supplier";
-  }
-
-  return "Stok";
 }
 
 export default async function PengirimanDetailPage({
@@ -120,9 +134,8 @@ export default async function PengirimanDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const sphId = Number(id);
 
-  if (!Number.isInteger(sphId) || sphId <= 0) {
+  if (!id) {
     notFound();
   }
 
@@ -138,7 +151,7 @@ export default async function PengirimanDetailPage({
       etaDate: sphDocuments.etaDate,
     })
     .from(sphDocuments)
-    .where(eq(sphDocuments.id, sphId))
+    .where(eq(sphDocuments.id, id))
     .limit(1);
 
   if (!document) {
@@ -154,7 +167,7 @@ export default async function PengirimanDetailPage({
       quantity: sphItems.quantity,
     })
     .from(sphItems)
-    .where(eq(sphItems.sphId, sphId));
+    .where(eq(sphItems.sphId, id));
   itemRows.sort((a, b) => a.lineNo - b.lineNo);
 
   const itemIds = itemRows.map((item) => item.id);
@@ -164,119 +177,43 @@ export default async function PengirimanDetailPage({
           .select({
             id: shipmentJourneys.id,
             sphItemId: shipmentJourneys.sphItemId,
+            splitNo: shipmentJourneys.splitNo,
+            quantity: shipmentJourneys.quantity,
             supplyType: shipmentJourneys.supplyType,
             supplierId: shipmentJourneys.supplierId,
             origin: shipmentJourneys.origin,
             destination: shipmentJourneys.destination,
             latestStatus: shipmentJourneys.latestStatus,
+            shippingVendor: shipmentJourneys.shippingVendor,
+            shippingCost: shipmentJourneys.shippingCost,
+            isShippingPaid: shipmentJourneys.isShippingPaid,
           })
           .from(shipmentJourneys)
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
-  const journeyByItem = new Map(journeyRows.map((journey) => [journey.sphItemId, journey]));
   const supplierOptions = await listSuppliers();
-  const supplierNameById = new Map(
-    supplierOptions.map((supplier) => [supplier.id, supplier.name])
-  );
+  const journeysByItem: Record<string, JourneyRow[]> = {};
+
+  for (const journey of journeyRows) {
+    journeysByItem[journey.sphItemId] = [
+      ...(journeysByItem[journey.sphItemId] ?? []),
+      journey,
+    ];
+  }
 
   return (
     <AppShell>
-      <form action={updateShipmentJourneyAction} className="shipment-detail-page">
-        <input name="sphId" type="hidden" value={document.id} />
-        <section className="form-section">
-          <div className="section-heading">
-            <div>
-              <p className="page-kicker">Journey Pengiriman</p>
-              <h1>{document.sphNo}</h1>
-              <p>
-                {document.customerName} ({document.customerCode}) - Tujuan SPH:{" "}
-                {document.franco || "-"}
-              </p>
-            </div>
-            <div className="shipment-heading-actions">
-              <Link className="secondary-button" href="/pengiriman">
-                Kembali
-              </Link>
-              <button className="primary-button" type="submit">
-                Simpan Journey
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <div className="shipment-journey-list">
-          {itemRows.length > 0 ? (
-            itemRows.map((item) => {
-              const journey = journeyByItem.get(item.id);
-              const selectedSupply =
-                journey?.supplyType === "supplier" && journey.supplierId
-                  ? `supplier:${journey.supplierId}`
-                  : "stock";
-
-              return (
-                <section className="shipment-item" key={item.id}>
-                  <div className="shipment-item-summary">
-                    <div>
-                      <span>Item {item.lineNo}</span>
-                      <strong>{item.partName}</strong>
-                      <p>
-                        {item.partNumber || "-"} - Qty {item.quantity}
-                      </p>
-                    </div>
-                    <div>
-                      <span>Supply</span>
-                      <strong>{formatSupply(journey, supplierNameById)}</strong>
-                    </div>
-                  </div>
-
-                  <div className="shipment-grid">
-                    <label>
-                      <span>Supply</span>
-                      <select name={`supply-${item.id}`} defaultValue={selectedSupply}>
-                        <option value="stock">Stok</option>
-                        {supplierOptions.map((supplier) => (
-                          <option key={supplier.id} value={`supplier:${supplier.id}`}>
-                            {supplier.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label>
-                      <span>Asal</span>
-                      <input
-                        name={`origin-${item.id}`}
-                        placeholder="Gudang / lokasi supplier"
-                        defaultValue={journey?.origin}
-                      />
-                    </label>
-
-                    <label>
-                      <span>Tujuan</span>
-                      <input
-                        name={`destination-${item.id}`}
-                        placeholder={document.franco || "Lokasi tujuan"}
-                        defaultValue={journey?.destination || document.franco}
-                      />
-                    </label>
-
-                    <label>
-                      <span>Status Terakhir</span>
-                      <input
-                        name={`latestStatus-${item.id}`}
-                        placeholder="Transit, menunggu driver, sampai"
-                        defaultValue={journey?.latestStatus}
-                      />
-                    </label>
-                  </div>
-                </section>
-              );
-            })
-          ) : (
-            <section className="empty-state">SPH ini belum memiliki item.</section>
-          )}
-        </div>
-      </form>
+      <ShipmentJourneyForm
+        action={updateShipmentJourneyAction}
+        customerCode={document.customerCode}
+        customerName={document.customerName}
+        destinationFallback={document.franco}
+        items={itemRows}
+        journeysByItem={journeysByItem}
+        sphId={document.id}
+        sphNo={document.sphNo}
+        suppliers={supplierOptions}
+      />
     </AppShell>
   );
 }

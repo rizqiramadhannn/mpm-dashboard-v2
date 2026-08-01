@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { customers } from "../../db/schema";
 
@@ -62,6 +62,27 @@ function optionalString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseId(formData: FormData) {
+  const id = formData.get("id");
+
+  if (typeof id !== "string" || id.trim() === "") {
+    throw new Error("Customer tidak valid.");
+  }
+
+  return id.trim();
+}
+
+function customerValuesFromForm(formData: FormData) {
+  return {
+    code: requiredString(formData, "code").toUpperCase(),
+    name: requiredString(formData, "name"),
+    detailLine1: requiredString(formData, "detailLine1"),
+    detailLine2: requiredString(formData, "detailLine2"),
+    detailLine3: optionalString(formData, "detailLine3"),
+    contactName: optionalString(formData, "contactName"),
+  };
+}
+
 export async function ensureSeedCustomers() {
   const db = await getDb();
 
@@ -96,20 +117,57 @@ export async function listCustomers() {
     .orderBy(asc(customers.name));
 }
 
+export async function getCustomer(id: string | number) {
+  await ensureSeedCustomers();
+
+  const customerId = String(id).trim();
+
+  if (!customerId) {
+    notFound();
+  }
+
+  const db = await getDb();
+  const [customer] = await db
+    .select({
+      id: customers.id,
+      code: customers.code,
+      name: customers.name,
+      detailLine1: customers.detailLine1,
+      detailLine2: customers.detailLine2,
+      detailLine3: customers.detailLine3,
+      contactName: customers.contactName,
+    })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+
+  if (!customer) {
+    notFound();
+  }
+
+  return customer;
+}
+
 export async function createCustomerAction(formData: FormData) {
   "use server";
 
   const db = await getDb();
-  const code = requiredString(formData, "code").toUpperCase();
+  await db.insert(customers).values(customerValuesFromForm(formData));
 
-  await db.insert(customers).values({
-    code,
-    name: requiredString(formData, "name"),
-    detailLine1: requiredString(formData, "detailLine1"),
-    detailLine2: requiredString(formData, "detailLine2"),
-    detailLine3: optionalString(formData, "detailLine3"),
-    contactName: optionalString(formData, "contactName"),
-  });
+  revalidatePath("/customer/customer-list");
+  revalidatePath("/customer/add-new-customer");
+  revalidatePath("/sph/create");
+  redirect("/customer/customer-list");
+}
+
+export async function updateCustomerAction(formData: FormData) {
+  "use server";
+
+  const db = await getDb();
+  await db
+    .update(customers)
+    .set(customerValuesFromForm(formData))
+    .where(eq(customers.id, parseId(formData)));
 
   revalidatePath("/customer/customer-list");
   revalidatePath("/customer/add-new-customer");

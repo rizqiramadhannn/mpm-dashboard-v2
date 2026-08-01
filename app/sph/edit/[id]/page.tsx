@@ -4,7 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import { AppShell } from "../../../components/AppShell";
 import { listCustomers } from "../../../customer/data";
 import { getDb } from "../../../../db";
-import { customers, sphDocuments, sphItems } from "../../../../db/schema";
+import {
+  customers,
+  invoiceDocuments,
+  invoiceItems,
+  sphDocuments,
+  sphItems,
+} from "../../../../db/schema";
 import { CreateSphForm } from "../../create/CreateSphForm";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +38,16 @@ function parseInteger(value: FormDataEntryValue | null, key: string) {
   }
 
   return parsed;
+}
+
+function requiredId(formData: FormData, key: string) {
+  const value = formData.get(key);
+
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${key} tidak valid.`);
+  }
+
+  return value.trim();
 }
 
 function customerInitials(customerCode: string, customerName: string) {
@@ -123,11 +139,36 @@ function toRupiahWords(value: number) {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
+  const topMatch = paymentTerm.match(/TOP\s*(\d+)/i);
+
+  if (topMatch) {
+    return addDays(sphDate, Number(topMatch[1]));
+  }
+
+  return sphDate;
+}
+
+function invoiceNoFromSph(sphNo: string) {
+  return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
+}
+
 async function updateSphAction(formData: FormData) {
   "use server";
 
-  const sphId = parseInteger(formData.get("sphId"), "SPH");
-  const customerId = parseInteger(formData.get("customerId"), "Customer");
+  const sphId = requiredId(formData, "SPH");
+  const customerId = requiredId(formData, "Customer");
   const sphDate = requiredString(formData, "sphDate");
   const paymentTerm = requiredString(formData, "paymentTerm");
   const franco = requiredString(formData, "franco");
@@ -137,7 +178,10 @@ async function updateSphAction(formData: FormData) {
 
   const db = await getDb();
   const [existingSph] = await db
-    .select({ id: sphDocuments.id })
+    .select({
+      id: sphDocuments.id,
+      sphNo: sphDocuments.sphNo,
+    })
     .from(sphDocuments)
     .where(eq(sphDocuments.id, sphId))
     .limit(1);
@@ -191,6 +235,7 @@ async function updateSphAction(formData: FormData) {
   }
 
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
 
   await db
     .update(sphDocuments)
@@ -206,7 +251,7 @@ async function updateSphAction(formData: FormData) {
       deliveryDate,
       etaDate,
       franco,
-      paymentDueDate: sphDate,
+      paymentDueDate,
       paymentTerm,
       sphDate,
       totalAmount,
@@ -214,18 +259,105 @@ async function updateSphAction(formData: FormData) {
     .where(eq(sphDocuments.id, sphId));
 
   await db.delete(sphItems).where(eq(sphItems.sphId, sphId));
-  await db.insert(sphItems).values(
-    items.map((item) => ({
-      lineNo: item.lineNo,
-      partName: item.partName,
-      partNumber: item.partNumber,
-      quantity: item.quantity,
-      sphId,
-      totalPrice: item.totalPrice,
-      unitPrice: item.unitPrice,
-    }))
-  );
+  const insertedItems = await db
+    .insert(sphItems)
+    .values(
+      items.map((item) => ({
+        lineNo: item.lineNo,
+        partName: item.partName,
+        partNumber: item.partNumber,
+        quantity: item.quantity,
+        sphId,
+        totalPrice: item.totalPrice,
+        unitPrice: item.unitPrice,
+      }))
+    )
+    .returning({
+      id: sphItems.id,
+      lineNo: sphItems.lineNo,
+    });
+  const sphItemIdByLine = new Map(insertedItems.map((item) => [item.lineNo, item.id]));
 
+  const [existingInvoice] = await db
+    .select({
+      id: invoiceDocuments.id,
+      invoiceNo: invoiceDocuments.invoiceNo,
+    })
+    .from(invoiceDocuments)
+    .where(eq(invoiceDocuments.sphId, sphId))
+    .limit(1);
+
+  if (existingInvoice) {
+    await db
+      .update(invoiceDocuments)
+      .set({
+        amountInWords: toRupiahWords(totalAmount),
+        customerDetailLine1: customer.detailLine1,
+        customerDetailLine2: customer.detailLine2,
+        customerDetailLine3: customer.detailLine3,
+        customerName: customer.name,
+        franco,
+        invoiceDate: sphDate,
+        invoiceNo: invoiceNoFromSph(existingSph.sphNo),
+        paymentDueDate,
+        paymentTerm,
+        totalAmount,
+      })
+      .where(eq(invoiceDocuments.id, existingInvoice.id));
+
+    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
+    await db.insert(invoiceItems).values(
+      items.map((item) => ({
+        invoiceId: existingInvoice.id,
+        lineNo: item.lineNo,
+        partName: item.partName,
+        partNumber: item.partNumber,
+        quantity: item.quantity,
+        sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
+        totalPrice: item.totalPrice,
+        unitPrice: item.unitPrice,
+      }))
+    );
+  } else {
+    const [document] = await db
+      .select({ sphNo: sphDocuments.sphNo })
+      .from(sphDocuments)
+      .where(eq(sphDocuments.id, sphId))
+      .limit(1);
+    const insertedInvoice = await db
+      .insert(invoiceDocuments)
+      .values({
+        amountInWords: toRupiahWords(totalAmount),
+        customerDetailLine1: customer.detailLine1,
+        customerDetailLine2: customer.detailLine2,
+        customerDetailLine3: customer.detailLine3,
+        customerName: customer.name,
+        franco,
+        invoiceDate: sphDate,
+        invoiceNo: invoiceNoFromSph(document?.sphNo ?? sphId),
+        paymentDueDate,
+        paymentTerm,
+        sphId,
+        status: "pending",
+        totalAmount,
+      })
+      .returning({ id: invoiceDocuments.id });
+
+    await db.insert(invoiceItems).values(
+      items.map((item) => ({
+        invoiceId: insertedInvoice[0].id,
+        lineNo: item.lineNo,
+        partName: item.partName,
+        partNumber: item.partNumber,
+        quantity: item.quantity,
+        sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
+        totalPrice: item.totalPrice,
+        unitPrice: item.unitPrice,
+      }))
+    );
+  }
+
+  revalidatePath("/invoice");
   revalidatePath("/sph/list");
   revalidatePath(`/sph/edit/${sphId}`);
   redirect("/sph/list");
@@ -237,9 +369,8 @@ export default async function EditSphPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const sphId = Number(id);
 
-  if (!Number.isInteger(sphId) || sphId <= 0) {
+  if (!id) {
     notFound();
   }
 
@@ -256,7 +387,7 @@ export default async function EditSphPage({
       sphNo: sphDocuments.sphNo,
     })
     .from(sphDocuments)
-    .where(eq(sphDocuments.id, sphId))
+    .where(eq(sphDocuments.id, id))
     .limit(1);
 
   if (!document) {
@@ -282,7 +413,7 @@ export default async function EditSphPage({
       unitPrice: sphItems.unitPrice,
     })
     .from(sphItems)
-    .where(eq(sphItems.sphId, sphId));
+    .where(eq(sphItems.sphId, id));
 
   itemRows.sort((a, b) => a.lineNo - b.lineNo);
 
@@ -307,7 +438,7 @@ export default async function EditSphPage({
             items: itemRows,
             paymentTerm: document.paymentTerm,
             sphDate: document.sphDate,
-            sphId,
+            sphId: id,
             sphNo: document.sphNo,
           }}
           submitLabel="Update SPH"

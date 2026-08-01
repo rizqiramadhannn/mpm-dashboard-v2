@@ -18,28 +18,40 @@ function safeFileName(fileName: string, fallback: string) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const noteId = Number(id);
+  const searchParams = new URL(request.url).searchParams;
+  const fileType =
+    searchParams.get("type") === "paymentProof" ? "paymentProof" : "invoice";
+  const fileIndex = Number(searchParams.get("index") ?? "0");
+  const disposition = searchParams.get("inline") === "1" ? "inline" : "attachment";
 
-  if (!Number.isInteger(noteId) || noteId <= 0) {
+  if (!id) {
     return NextResponse.json({ error: "Nota tidak valid." }, { status: 400 });
   }
 
-  const file = await getSupplierNoteFile(noteId);
+  const file = await getSupplierNoteFile(
+    id,
+    fileType,
+    Number.isFinite(fileIndex) ? fileIndex : 0
+  );
 
-  if (!file || !file.sourceFileBase64) {
+  if (!file || (!file.base64 && !file.url)) {
     return NextResponse.json({ error: "File nota tidak ditemukan." }, { status: 404 });
   }
 
-  const fileName = safeFileName(file.sourceFileName, `${file.noteNo}.pdf`);
-  const mimeType = file.sourceFileMimeType || "application/octet-stream";
+  if (file.url && !file.base64) {
+    return NextResponse.redirect(file.url);
+  }
 
-  return new Response(base64ToBytes(file.sourceFileBase64), {
+  const fileName = safeFileName(file.fileName, `${file.noteNo}.pdf`);
+  const mimeType = file.mimeType || "application/octet-stream";
+
+  return new Response(base64ToBytes(file.base64), {
     headers: {
-      "content-disposition": `attachment; filename="${fileName}"`,
+      "content-disposition": `${disposition}; filename="${fileName}"`,
       "content-type": mimeType,
     },
   });

@@ -1,63 +1,87 @@
 import Link from "next/link";
 import { AppShell } from "../../components/AppShell";
+import { DateRangeFilter } from "../../components/DateRangeFilter";
+import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { listSupplierNotes } from "../notes/data";
+import { SupplierNotesTable } from "./SupplierNotesTable";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(value: string | null) {
+function getSearchParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function textMatches(value: unknown, query: string) {
+  return String(value ?? "").toLowerCase().includes(query);
+}
+
+function isWithinDateRange(value: string | null, from: string, to: string) {
   if (!value) {
-    return "-";
+    return !from && !to;
   }
 
-  const date = new Date(`${value}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  const dateValue = value.slice(0, 10);
+  return (!from || dateValue >= from) && (!to || dateValue <= to);
 }
 
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    currency: "IDR",
-    maximumFractionDigits: 0,
-    style: "currency",
-  }).format(value);
-}
-
-function formatFileSize(value: number) {
-  if (!value) {
-    return "";
-  }
-
-  if (value < 1024 * 1024) {
-    return `${Math.round(value / 1024)} KB`;
-  }
-
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function DownloadIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
-      <path
-        d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
-export default async function SupplierNotesPage() {
+export default async function SupplierNotesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const query = getSearchParam(params, "q").trim().toLowerCase();
+  const paymentFilter = getSearchParam(params, "payment");
+  const flagFilter = getSearchParam(params, "flag");
+  const categoryFilter = getSearchParam(params, "category");
+  const fromDate = getSearchParam(params, "from");
+  const toDate = getSearchParam(params, "to");
   const notes = await listSupplierNotes();
+  const paymentOptions = [...new Set(notes.map((note) => note.paymentStatus))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const flagOptions = [...new Set(notes.map((note) => note.flag))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const categoryOptions = [...new Set(notes.map((note) => note.category))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const filteredNotes = notes.filter((note) => {
+    const matchesQuery =
+      !query ||
+      [
+        note.noteNo,
+        note.supplierName,
+        note.category,
+        note.flag,
+        note.paymentStatus,
+        note.paymentTerm,
+        note.purchasePurpose,
+        note.customerName,
+        note.sourceFileName,
+        note.invoiceFileName,
+        note.invoiceFileUrl,
+        note.paymentProofFileName,
+        note.paymentProofFileUrl,
+        ...note.paymentProofFiles.flatMap((file) => [file.name, file.url]),
+        ...note.items.flatMap((item) => [item.partNumber, item.description]),
+      ].some((value) => textMatches(value, query));
+    const matchesPayment =
+      !paymentFilter ||
+      (paymentFilter === "OUTSTANDING"
+        ? note.paymentStatus === "BELUM BAYAR" || note.paymentStatus === "DP"
+        : note.paymentStatus === paymentFilter);
+    const matchesFlag = !flagFilter || note.flag === flagFilter;
+    const matchesCategory = !categoryFilter || note.category === categoryFilter;
+    const matchesDate = isWithinDateRange(note.noteDate, fromDate, toDate);
+
+    return matchesQuery && matchesPayment && matchesFlag && matchesCategory && matchesDate;
+  });
+  const { pageRows, safePage } = paginateRows(filteredNotes, getCurrentPage(params));
 
   return (
     <AppShell>
@@ -69,93 +93,73 @@ export default async function SupplierNotesPage() {
           </div>
         </div>
 
-        <div className="customer-table-wrap">
-          <table className="customer-table supplier-note-table">
-            <thead>
-              <tr>
-                <th>No Nota</th>
-                <th>Tanggal</th>
-                <th>Supplier</th>
-                <th>Flag</th>
-                <th>Total</th>
-                <th>Payment</th>
-                <th>Item</th>
-                <th>File</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notes.length > 0 ? (
-                notes.map((note) => (
-                  <tr key={note.id}>
-                    <td>
-                      <strong className="table-primary">{note.noteNo}</strong>
-                    </td>
-                    <td>{formatDate(note.noteDate)}</td>
-                    <td>
-                      <div className="stacked-cell">
-                        <strong>{note.supplierName}</strong>
-                        <span>{note.category}</span>
-                      </div>
-                    </td>
-                    <td>{note.flag}</td>
-                    <td>{formatRupiah(note.amount)}</td>
-                    <td>
-                      <div className="stacked-cell">
-                        <strong>{note.paymentStatus}</strong>
-                        <span>
-                          Sisa {formatRupiah(note.remainingPayment)}
-                          {note.paymentDeadline
-                            ? ` / Jatuh tempo ${formatDate(note.paymentDeadline)}`
-                            : ""}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <details className="item-preview">
-                        <summary>{note.items.length} item</summary>
-                        <div>
-                          {note.items.map((item) => (
-                            <p key={item.id}>
-                              <span>{item.lineNo}.</span> {item.partNumber || "-"} -{" "}
-                              {item.description} ({item.quantity} {item.uom} x{" "}
-                              {formatRupiah(item.unitPrice)})
-                            </p>
-                          ))}
-                        </div>
-                      </details>
-                    </td>
-                    <td>
-                      {note.sourceFileName ? (
-                        <div className="table-actions icon-actions">
-                          <Link
-                            aria-label={`Download ${note.sourceFileName}`}
-                            className="icon-action"
-                            href={`/supplier/nota-supplier/download/${note.id}`}
-                            title={`Download ${note.sourceFileName}`}
-                          >
-                            <DownloadIcon />
-                          </Link>
-                          <span className="file-meta">
-                            {note.sourceFileName}
-                            {note.sourceFileSize
-                              ? ` (${formatFileSize(note.sourceFileSize)})`
-                              : ""}
-                          </span>
-                        </div>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8}>Belum ada nota supplier.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <form className="table-filter-bar">
+          <label>
+            <span>Search</span>
+            <input
+              name="q"
+              placeholder="No nota, supplier, item, file"
+              defaultValue={getSearchParam(params, "q")}
+            />
+          </label>
+          <label>
+            <span>Payment</span>
+            <select name="payment" defaultValue={paymentFilter}>
+              <option value="">Semua Payment</option>
+              <option value="OUTSTANDING">Belum Terbayar</option>
+              {paymentOptions.map((payment) => (
+                <option key={payment} value={payment}>
+                  {payment}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Flag</span>
+            <select name="flag" defaultValue={flagFilter}>
+              <option value="">Semua Flag</option>
+              {flagOptions.map((flag) => (
+                <option key={flag} value={flag}>
+                  {flag}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <select name="category" defaultValue={categoryFilter}>
+              <option value="">Semua Category</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </label>
+          <DateRangeFilter from={fromDate} to={toDate} />
+          <div className="table-filter-actions">
+            <button type="submit">Filter</button>
+            <Link href="/supplier/nota-supplier">Reset</Link>
+          </div>
+        </form>
+
+        <SupplierNotesTable
+          key={[
+            query,
+            paymentFilter,
+            flagFilter,
+            categoryFilter,
+            fromDate,
+            toDate,
+            safePage,
+          ].join("|")}
+          notes={pageRows}
+        />
+        <Pagination
+          currentPage={safePage}
+          params={params}
+          totalItems={filteredNotes.length}
+        />
       </section>
     </AppShell>
   );

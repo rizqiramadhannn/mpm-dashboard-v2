@@ -43,6 +43,41 @@
       "when": 1785510254804,
       "tag": "0005_cute_magdalene",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785510953194,
+      "tag": "0006_watery_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785511198754,
+      "tag": "0007_short_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1785511528616,
+      "tag": "0008_easy_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785520800000,
+      "tag": "0009_invoice_ledger_amounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785522600000,
+      "tag": "0010_normalize_invoice_numbers",
+      "breakpoints": true
     }
   ]
 }

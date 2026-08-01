@@ -7,6 +7,7 @@ type SupplierNoteFileInput = {
   mimeType?: unknown;
   size?: unknown;
   base64?: unknown;
+  url?: unknown;
 };
 
 type SupplierNoteItemInput = {
@@ -39,15 +40,25 @@ export type SupplierNotePayload = {
   customerName?: unknown;
   flag?: unknown;
   file?: SupplierNoteFileInput;
+  invoiceFile?: SupplierNoteFileInput;
+  invoiceFileUrl?: unknown;
+  paymentProofFile?: SupplierNoteFileInput;
+  paymentProofFiles?: unknown;
+  paymentProofFileUrl?: unknown;
   items?: unknown;
 };
 
 export type CreatedSupplierNote = {
-  id: number;
-  supplierId: number;
+  id: string;
+  supplierId: string;
   supplierName: string;
   noteNo: string;
   itemCount: number;
+};
+
+export type SupplierNoteFilePayload = {
+  invoiceFile?: SupplierNoteFileInput;
+  paymentProofFiles?: unknown;
 };
 
 function asString(value: unknown, fallback = "") {
@@ -107,6 +118,116 @@ function normalizeBase64(value: unknown) {
   return dataUrlBase64 ?? text;
 }
 
+function fileInput(file: SupplierNoteFileInput | undefined, fallbackUrl?: unknown) {
+  const base64 = normalizeBase64(file?.base64);
+  const url = asString(file?.url) || asString(fallbackUrl);
+
+  return {
+    base64,
+    hasFile: Boolean(base64 || url),
+    mimeType: asString(file?.mimeType),
+    name: asString(file?.name),
+    size: Math.round(asNumber(file?.size)),
+    url,
+  };
+}
+
+async function storedFileFromInput(file: ReturnType<typeof fileInput>) {
+  return {
+    base64: file.base64,
+    mimeType: file.mimeType,
+    name: file.name,
+    sha256: await sha256(file.base64),
+    size: file.size,
+    url: file.url,
+  };
+}
+
+function paymentStatusFromAmount(amount: number, paidAmount: number) {
+  if (paidAmount <= 0) {
+    return "BELUM BAYAR";
+  }
+
+  if (paidAmount < amount) {
+    return "DP";
+  }
+
+  return "LUNAS";
+}
+
+function clampPaidAmount(value: unknown, amount: number) {
+  return Math.min(Math.max(Math.round(asNumber(value)), 0), amount);
+}
+
+type SupplierNoteStoredFile = {
+  base64: string;
+  mimeType: string;
+  name: string;
+  sha256: string;
+  size: number;
+  url: string;
+};
+
+async function paymentProofInputs(payload: SupplierNotePayload) {
+  const rawFiles = Array.isArray(payload.paymentProofFiles)
+    ? payload.paymentProofFiles
+    : payload.paymentProofFile
+      ? [payload.paymentProofFile]
+      : [];
+  const files = rawFiles
+    .map((file) => fileInput(file as SupplierNoteFileInput))
+    .filter((file) => file.hasFile);
+  const fallbackUrlFile = fileInput(undefined, payload.paymentProofFileUrl);
+
+  if (fallbackUrlFile.hasFile) {
+    files.push(fallbackUrlFile);
+  }
+
+  return Promise.all(files.map(storedFileFromInput));
+}
+
+function storedPaymentProofFiles(note: {
+  paymentProofFileBase64?: string;
+  paymentProofFileMimeType?: string;
+  paymentProofFileName?: string;
+  paymentProofFileSha256?: string;
+  paymentProofFileSize?: number;
+  paymentProofFileUrl?: string;
+  paymentProofFilesJson?: SupplierNoteStoredFile[] | null;
+}) {
+  const jsonFiles = Array.isArray(note.paymentProofFilesJson)
+    ? note.paymentProofFilesJson
+    : [];
+
+  if (jsonFiles.length > 0) {
+    return jsonFiles.filter((file) => file.base64 || file.url);
+  }
+
+  if (note.paymentProofFileName || note.paymentProofFileUrl || note.paymentProofFileBase64) {
+    return [
+      {
+        base64: note.paymentProofFileBase64 ?? "",
+        mimeType: note.paymentProofFileMimeType ?? "",
+        name: note.paymentProofFileName ?? "",
+        sha256: note.paymentProofFileSha256 ?? "",
+        size: note.paymentProofFileSize ?? 0,
+        url: note.paymentProofFileUrl ?? "",
+      },
+    ];
+  }
+
+  return [];
+}
+
+function fileMetadata(file: SupplierNoteStoredFile) {
+  return {
+    mimeType: file.mimeType,
+    name: file.name,
+    size: file.size,
+    url: file.url,
+  };
+}
+
 async function sha256(text: string) {
   if (!text) {
     return "";
@@ -158,90 +279,107 @@ export async function createSupplierNote(payload: SupplierNotePayload) {
       items.reduce((sum, item) => sum + item.totalPrice, 0)
     )
   );
-  const paidAmount = Math.round(asNumber(payload.paidAmount));
-  const fileBase64 = normalizeBase64(payload.file?.base64);
-  const fileName = asString(payload.file?.name);
-  const fileMimeType = asString(payload.file?.mimeType);
-  const fileSize = Math.round(asNumber(payload.file?.size));
-  const fileSha256 = await sha256(fileBase64);
+  const invoiceFile = fileInput(payload.invoiceFile ?? payload.file, payload.invoiceFileUrl);
+  const paymentProofFiles = await paymentProofInputs(payload);
+  const paidAmount = clampPaidAmount(payload.paidAmount, amount);
+  const paymentStatus = paymentStatusFromAmount(amount, paidAmount);
+  const invoiceFileSha256 = await sha256(invoiceFile.base64);
+  const paymentProofFile = paymentProofFiles[0] ?? {
+    base64: "",
+    mimeType: "",
+    name: "",
+    sha256: "",
+    size: 0,
+    url: "",
+  };
   const db = await getDb();
 
-  return db.transaction(async (tx) => {
-    let [supplier] = await tx
-      .select({ id: suppliers.id, name: suppliers.name })
-      .from(suppliers)
-      .where(eq(suppliers.normalizedName, normalizedName))
-      .limit(1);
+  let [supplier] = await db
+    .select({ id: suppliers.id, name: suppliers.name })
+    .from(suppliers)
+    .where(eq(suppliers.normalizedName, normalizedName))
+    .limit(1);
 
-    if (!supplier) {
-      const [createdSupplier] = await tx
-        .insert(suppliers)
-        .values({
-          name: supplierName,
-          normalizedName,
-        })
-        .returning({ id: suppliers.id, name: suppliers.name });
-      supplier = createdSupplier;
-    }
-
-    const [existing] = await tx
-      .select({ id: supplierNotes.id })
-      .from(supplierNotes)
-      .where(
-        and(eq(supplierNotes.supplierId, supplier.id), eq(supplierNotes.noteNo, noteNo))
-      )
-      .limit(1);
-
-    if (existing) {
-      throw new Error(`Nota ${noteNo} untuk ${supplier.name} sudah ada.`);
-    }
-
-    const [note] = await tx
-      .insert(supplierNotes)
+  if (!supplier) {
+    const [createdSupplier] = await db
+      .insert(suppliers)
       .values({
-        supplierId: supplier.id,
-        noteNo,
-        noteDate,
-        itemSummary: asString(payload.itemSummary, items[0]?.description ?? ""),
-        category: asString(payload.category, "Spareparts") || "Spareparts",
-        amount,
-        paymentStatus:
-          asString(payload.paymentStatus, "BELUM BAYAR") || "BELUM BAYAR",
-        paidAmount,
-        remainingPayment: Math.max(amount - paidAmount, 0),
-        paymentTerm: asString(payload.paymentTerm),
-        paymentDeadline: asString(payload.paymentDeadline) || null,
-        paymentDate: asString(payload.paymentDate) || null,
-        purchasePurpose: asString(payload.purchasePurpose),
-        customerName: asString(payload.customerName),
-        flag,
-        sourceFileName: fileName,
-        sourceFileMimeType: fileMimeType,
-        sourceFileSize: fileSize,
-        sourceFileBase64: fileBase64,
-        sourceFileSha256: fileSha256,
-        extractionJson: {
-          taxStatus: asString(payload.taxStatus),
-          input: payload,
-        },
+        name: supplierName,
+        normalizedName,
       })
-      .returning({ id: supplierNotes.id });
+      .returning({ id: suppliers.id, name: suppliers.name });
+    supplier = createdSupplier;
+  }
 
-    await tx.insert(supplierNoteItems).values(
-      items.map((item) => ({
-        ...item,
-        supplierNoteId: note.id,
-      }))
-    );
+  const [existing] = await db
+    .select({ id: supplierNotes.id })
+    .from(supplierNotes)
+    .where(
+      and(eq(supplierNotes.supplierId, supplier.id), eq(supplierNotes.noteNo, noteNo))
+    )
+    .limit(1);
 
-    return {
-      id: note.id,
+  if (existing) {
+    throw new Error(`Nota ${noteNo} untuk ${supplier.name} sudah ada.`);
+  }
+
+  const [note] = await db
+    .insert(supplierNotes)
+    .values({
       supplierId: supplier.id,
-      supplierName: supplier.name,
       noteNo,
-      itemCount: items.length,
-    } satisfies CreatedSupplierNote;
-  });
+      noteDate,
+      itemSummary: asString(payload.itemSummary, items[0]?.description ?? ""),
+      category: asString(payload.category, "Spareparts") || "Spareparts",
+      amount,
+      paymentStatus,
+      paidAmount,
+      remainingPayment: Math.max(amount - paidAmount, 0),
+      paymentTerm: asString(payload.paymentTerm),
+      paymentDeadline: asString(payload.paymentDeadline) || null,
+      paymentDate: asString(payload.paymentDate) || null,
+      purchasePurpose: asString(payload.purchasePurpose),
+      customerName: asString(payload.customerName),
+      flag,
+      sourceFileName: invoiceFile.name,
+      sourceFileMimeType: invoiceFile.mimeType,
+      sourceFileSize: invoiceFile.size,
+      sourceFileBase64: invoiceFile.base64,
+      sourceFileSha256: invoiceFileSha256,
+      invoiceFileName: invoiceFile.name,
+      invoiceFileMimeType: invoiceFile.mimeType,
+      invoiceFileSize: invoiceFile.size,
+      invoiceFileBase64: invoiceFile.base64,
+      invoiceFileUrl: invoiceFile.url,
+      invoiceFileSha256,
+      paymentProofFileName: paymentProofFile.name,
+      paymentProofFileMimeType: paymentProofFile.mimeType,
+      paymentProofFileSize: paymentProofFile.size,
+      paymentProofFileBase64: paymentProofFile.base64,
+      paymentProofFileUrl: paymentProofFile.url,
+      paymentProofFileSha256: paymentProofFile.sha256,
+      paymentProofFilesJson: paymentProofFiles,
+      extractionJson: {
+        taxStatus: asString(payload.taxStatus),
+        input: payload,
+      },
+    })
+    .returning({ id: supplierNotes.id });
+
+  await db.insert(supplierNoteItems).values(
+    items.map((item) => ({
+      ...item,
+      supplierNoteId: note.id,
+    }))
+  );
+
+  return {
+    id: note.id,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    noteNo,
+    itemCount: items.length,
+  } satisfies CreatedSupplierNote;
 }
 
 export async function listSupplierNotes() {
@@ -267,6 +405,18 @@ export async function listSupplierNotes() {
       sourceFileName: supplierNotes.sourceFileName,
       sourceFileMimeType: supplierNotes.sourceFileMimeType,
       sourceFileSize: supplierNotes.sourceFileSize,
+      sourceFileBase64: supplierNotes.sourceFileBase64,
+      invoiceFileName: supplierNotes.invoiceFileName,
+      invoiceFileMimeType: supplierNotes.invoiceFileMimeType,
+      invoiceFileSize: supplierNotes.invoiceFileSize,
+      invoiceFileBase64: supplierNotes.invoiceFileBase64,
+      invoiceFileUrl: supplierNotes.invoiceFileUrl,
+      paymentProofFileName: supplierNotes.paymentProofFileName,
+      paymentProofFileMimeType: supplierNotes.paymentProofFileMimeType,
+      paymentProofFileSize: supplierNotes.paymentProofFileSize,
+      paymentProofFileBase64: supplierNotes.paymentProofFileBase64,
+      paymentProofFileUrl: supplierNotes.paymentProofFileUrl,
+      paymentProofFilesJson: supplierNotes.paymentProofFilesJson,
       createdAt: supplierNotes.createdAt,
     })
     .from(supplierNotes)
@@ -292,7 +442,7 @@ export async function listSupplierNotes() {
           .where(inArray(supplierNoteItems.supplierNoteId, noteIds))
       : [];
 
-  const itemsByNote = new Map<number, typeof items>();
+  const itemsByNote = new Map<string, typeof items>();
 
   for (const item of items) {
     const noteItems = itemsByNote.get(item.supplierNoteId) ?? [];
@@ -304,13 +454,58 @@ export async function listSupplierNotes() {
     noteItems.sort((a, b) => a.lineNo - b.lineNo);
   }
 
-  return notes.map((note) => ({
-    ...note,
-    items: itemsByNote.get(note.id) ?? [],
-  }));
+  return notes.map((note) => {
+    const paidAmount = clampPaidAmount(note.paidAmount, note.amount);
+    const paymentStatus = paymentStatusFromAmount(note.amount, paidAmount);
+    const hasInvoiceFile = Boolean(note.invoiceFileBase64 || note.sourceFileBase64);
+    const paymentProofFiles = storedPaymentProofFiles(note).filter(
+      (file) => file.base64
+    );
+
+    return {
+      amount: note.amount,
+      category: note.category,
+      createdAt: note.createdAt,
+      customerName: note.customerName,
+      flag: note.flag,
+      id: note.id,
+      invoiceFileMimeType: hasInvoiceFile
+        ? note.invoiceFileMimeType || note.sourceFileMimeType
+        : "",
+      invoiceFileName: hasInvoiceFile ? note.invoiceFileName || note.sourceFileName : "",
+      invoiceFileSize: hasInvoiceFile
+        ? note.invoiceFileSize || note.sourceFileSize
+        : 0,
+      invoiceFileUrl: "",
+      items: itemsByNote.get(note.id) ?? [],
+      itemSummary: note.itemSummary,
+      noteDate: note.noteDate,
+      noteNo: note.noteNo,
+      paidAmount,
+      paymentDeadline: note.paymentDeadline,
+      paymentProofFileMimeType: paymentProofFiles[0]?.mimeType ?? "",
+      paymentProofFileName: paymentProofFiles[0]?.name ?? "",
+      paymentProofFileSize: paymentProofFiles[0]?.size ?? 0,
+      paymentProofFileUrl: "",
+      paymentStatus,
+      paymentProofFiles: paymentProofFiles.map(fileMetadata),
+      paymentTerm: note.paymentTerm,
+      purchasePurpose: note.purchasePurpose,
+      remainingPayment: Math.max(note.amount - paidAmount, 0),
+      sourceFileMimeType: hasInvoiceFile ? note.sourceFileMimeType : "",
+      sourceFileName: hasInvoiceFile ? note.sourceFileName : "",
+      sourceFileSize: hasInvoiceFile ? note.sourceFileSize : 0,
+      supplierId: note.supplierId,
+      supplierName: note.supplierName,
+    };
+  });
 }
 
-export async function getSupplierNoteFile(id: number) {
+export async function getSupplierNoteFile(
+  id: string,
+  type: "invoice" | "paymentProof",
+  index = 0
+) {
   const db = await getDb();
   const [file] = await db
     .select({
@@ -318,10 +513,195 @@ export async function getSupplierNoteFile(id: number) {
       sourceFileName: supplierNotes.sourceFileName,
       sourceFileMimeType: supplierNotes.sourceFileMimeType,
       sourceFileBase64: supplierNotes.sourceFileBase64,
+      invoiceFileName: supplierNotes.invoiceFileName,
+      invoiceFileMimeType: supplierNotes.invoiceFileMimeType,
+      invoiceFileBase64: supplierNotes.invoiceFileBase64,
+      invoiceFileUrl: supplierNotes.invoiceFileUrl,
+      paymentProofFileName: supplierNotes.paymentProofFileName,
+      paymentProofFileMimeType: supplierNotes.paymentProofFileMimeType,
+      paymentProofFileBase64: supplierNotes.paymentProofFileBase64,
+      paymentProofFileUrl: supplierNotes.paymentProofFileUrl,
+      paymentProofFileSha256: supplierNotes.paymentProofFileSha256,
+      paymentProofFileSize: supplierNotes.paymentProofFileSize,
+      paymentProofFilesJson: supplierNotes.paymentProofFilesJson,
     })
     .from(supplierNotes)
     .where(eq(supplierNotes.id, id))
     .limit(1);
 
-  return file;
+  if (!file) {
+    return null;
+  }
+
+  if (type === "paymentProof") {
+    const proofFiles = storedPaymentProofFiles(file);
+    const selectedFile = proofFiles[Math.max(index, 0)] ?? proofFiles[0];
+
+    if (selectedFile) {
+      return {
+        base64: selectedFile.base64,
+        fileName: selectedFile.name,
+        mimeType: selectedFile.mimeType,
+        noteNo: file.noteNo,
+        url: "",
+      };
+    }
+
+    return {
+      base64: file.paymentProofFileBase64,
+      fileName: file.paymentProofFileName,
+      mimeType: file.paymentProofFileMimeType,
+      noteNo: file.noteNo,
+      url: "",
+    };
+  }
+
+  return {
+    base64: file.invoiceFileBase64 || file.sourceFileBase64,
+    fileName: file.invoiceFileName || file.sourceFileName,
+    mimeType: file.invoiceFileMimeType || file.sourceFileMimeType,
+    noteNo: file.noteNo,
+    url: "",
+  };
+}
+
+export async function updateSupplierNotePaidAmount(id: string, paidAmountInput: unknown) {
+  const db = await getDb();
+  const [note] = await db
+    .select({
+      amount: supplierNotes.amount,
+    })
+    .from(supplierNotes)
+    .where(eq(supplierNotes.id, id))
+    .limit(1);
+
+  if (!note) {
+    throw new Error("Nota supplier tidak ditemukan.");
+  }
+
+  const paidAmount = clampPaidAmount(paidAmountInput, note.amount);
+  const paymentStatus = paymentStatusFromAmount(note.amount, paidAmount);
+  const remainingPayment = Math.max(note.amount - paidAmount, 0);
+
+  await db
+    .update(supplierNotes)
+    .set({
+      paidAmount,
+      paymentStatus,
+      remainingPayment,
+    })
+    .where(eq(supplierNotes.id, id));
+
+  return {
+    id,
+    paidAmount,
+    paymentStatus,
+    remainingPayment,
+  };
+}
+
+export async function updateSupplierNoteFiles(
+  id: string,
+  payload: SupplierNoteFilePayload
+) {
+  const db = await getDb();
+  const [note] = await db
+    .select({
+      id: supplierNotes.id,
+      invoiceFileBase64: supplierNotes.invoiceFileBase64,
+      invoiceFileName: supplierNotes.invoiceFileName,
+      invoiceFileMimeType: supplierNotes.invoiceFileMimeType,
+      invoiceFileSize: supplierNotes.invoiceFileSize,
+      invoiceFileUrl: supplierNotes.invoiceFileUrl,
+      sourceFileBase64: supplierNotes.sourceFileBase64,
+      paymentProofFileBase64: supplierNotes.paymentProofFileBase64,
+      paymentProofFileMimeType: supplierNotes.paymentProofFileMimeType,
+      paymentProofFileName: supplierNotes.paymentProofFileName,
+      paymentProofFileSha256: supplierNotes.paymentProofFileSha256,
+      paymentProofFileSize: supplierNotes.paymentProofFileSize,
+      paymentProofFileUrl: supplierNotes.paymentProofFileUrl,
+      paymentProofFilesJson: supplierNotes.paymentProofFilesJson,
+      sourceFileName: supplierNotes.sourceFileName,
+      sourceFileMimeType: supplierNotes.sourceFileMimeType,
+      sourceFileSize: supplierNotes.sourceFileSize,
+    })
+    .from(supplierNotes)
+    .where(eq(supplierNotes.id, id))
+    .limit(1);
+
+  if (!note) {
+    throw new Error("Nota supplier tidak ditemukan.");
+  }
+
+  const updates: Partial<typeof supplierNotes.$inferInsert> = {};
+  const invoiceFile = fileInput(payload.invoiceFile);
+
+  if (invoiceFile.hasFile) {
+    const storedInvoiceFile = await storedFileFromInput(invoiceFile);
+    updates.sourceFileName = storedInvoiceFile.name;
+    updates.sourceFileMimeType = storedInvoiceFile.mimeType;
+    updates.sourceFileSize = storedInvoiceFile.size;
+    updates.sourceFileBase64 = storedInvoiceFile.base64;
+    updates.sourceFileSha256 = storedInvoiceFile.sha256;
+    updates.invoiceFileName = storedInvoiceFile.name;
+    updates.invoiceFileMimeType = storedInvoiceFile.mimeType;
+    updates.invoiceFileSize = storedInvoiceFile.size;
+    updates.invoiceFileBase64 = storedInvoiceFile.base64;
+    updates.invoiceFileUrl = "";
+    updates.invoiceFileSha256 = storedInvoiceFile.sha256;
+  }
+
+  const newPaymentProofFiles = await paymentProofInputs({
+    paymentProofFiles: payload.paymentProofFiles,
+  });
+
+  if (newPaymentProofFiles.length > 0) {
+    const paymentProofFiles = [
+      ...storedPaymentProofFiles(note).filter((file) => file.base64),
+      ...newPaymentProofFiles,
+    ];
+    const firstPaymentProofFile = paymentProofFiles[0];
+
+    updates.paymentProofFileName = firstPaymentProofFile.name;
+    updates.paymentProofFileMimeType = firstPaymentProofFile.mimeType;
+    updates.paymentProofFileSize = firstPaymentProofFile.size;
+    updates.paymentProofFileBase64 = firstPaymentProofFile.base64;
+    updates.paymentProofFileUrl = "";
+    updates.paymentProofFileSha256 = firstPaymentProofFile.sha256;
+    updates.paymentProofFilesJson = paymentProofFiles;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw new Error("File upload tidak ditemukan.");
+  }
+
+  await db.update(supplierNotes).set(updates).where(eq(supplierNotes.id, id));
+
+  const hasInvoiceFile = Boolean(
+    updates.invoiceFileBase64 ?? note.invoiceFileBase64 ?? note.sourceFileBase64
+  );
+  const paymentProofFiles =
+    "paymentProofFilesJson" in updates
+      ? (updates.paymentProofFilesJson as SupplierNoteStoredFile[])
+      : storedPaymentProofFiles(note).filter((file) => file.base64);
+  const firstPaymentProofFile = paymentProofFiles[0];
+
+  return {
+    id,
+    invoiceFileMimeType: hasInvoiceFile
+      ? updates.invoiceFileMimeType ?? note.invoiceFileMimeType
+      : "",
+    invoiceFileName: hasInvoiceFile ? updates.invoiceFileName ?? note.invoiceFileName : "",
+    invoiceFileSize: hasInvoiceFile ? updates.invoiceFileSize ?? note.invoiceFileSize : 0,
+    invoiceFileUrl: "",
+    paymentProofFileMimeType:
+      firstPaymentProofFile?.mimeType ?? "",
+    paymentProofFileName: firstPaymentProofFile?.name ?? "",
+    paymentProofFileSize: firstPaymentProofFile?.size ?? 0,
+    paymentProofFileUrl: "",
+    paymentProofFiles: paymentProofFiles.map(fileMetadata),
+    sourceFileMimeType: updates.sourceFileMimeType ?? note.sourceFileMimeType,
+    sourceFileName: updates.sourceFileName ?? note.sourceFileName,
+    sourceFileSize: updates.sourceFileSize ?? note.sourceFileSize,
+  };
 }

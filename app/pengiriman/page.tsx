@@ -1,20 +1,33 @@
 import { desc, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { AppShell } from "../components/AppShell";
+import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
 import { shipmentJourneys, sphDocuments, sphItems } from "../../db/schema";
 
 export const dynamic = "force-dynamic";
 
 type SphItemRow = {
-  id: number;
-  sphId: number;
+  id: string;
+  sphId: string;
 };
 
 type JourneyRow = {
-  sphItemId: number;
+  sphItemId: string;
   latestStatus: string;
 };
+
+function getSearchParam(
+  params: Record<string, string | string[] | undefined>,
+  key: string
+) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function textMatches(value: unknown, query: string) {
+  return String(value ?? "").toLowerCase().includes(query);
+}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -34,7 +47,28 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-export default async function PengirimanPage() {
+function isShipmentFinal(status: string) {
+  const normalized = status.trim().toLowerCase();
+
+  return [
+    "arrived",
+    "cancelled",
+    "delivered",
+    "done",
+    "received",
+    "selesai",
+    "terkirim",
+  ].includes(normalized);
+}
+
+export default async function PengirimanPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
+  const query = getSearchParam(params, "q").trim().toLowerCase();
+  const statusFilter = getSearchParam(params, "status");
   const db = await getDb();
   const documents = await db
     .select({
@@ -75,16 +109,16 @@ export default async function PengirimanPage() {
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
 
-  const itemCountBySph = new Map<number, number>();
-  const sphIdByItem = new Map<number, number>();
+  const itemCountBySph = new Map<string, number>();
+  const sphIdByItem = new Map<string, string>();
 
   for (const item of itemRows) {
     sphIdByItem.set(item.id, item.sphId);
     itemCountBySph.set(item.sphId, (itemCountBySph.get(item.sphId) ?? 0) + 1);
   }
 
-  const updatedCountBySph = new Map<number, number>();
-  const latestStatusBySph = new Map<number, string>();
+  const updatedCountBySph = new Map<string, number>();
+  const latestStatusBySph = new Map<string, string>();
 
   for (const journey of journeyRows) {
     const sphId = sphIdByItem.get(journey.sphItemId);
@@ -99,6 +133,32 @@ export default async function PengirimanPage() {
     }
   }
 
+  const filteredDocuments = documents.filter((document) => {
+    const itemCount = itemCountBySph.get(document.id) ?? 0;
+    const updatedCount = updatedCountBySph.get(document.id) ?? 0;
+    const latestStatus = latestStatusBySph.get(document.id) || "";
+    const isPending =
+      itemCount === 0 || updatedCount < itemCount || !isShipmentFinal(latestStatus);
+    const matchesQuery =
+      !query ||
+      [
+        document.sphNo,
+        document.customerName,
+        document.customerCode,
+        document.franco,
+        latestStatus,
+      ].some((value) => textMatches(value, query));
+    const matchesStatus =
+      !statusFilter ||
+      (statusFilter === "pending" ? isPending : !isPending);
+
+    return matchesQuery && matchesStatus;
+  });
+  const { pageRows, safePage } = paginateRows(
+    filteredDocuments,
+    getCurrentPage(params)
+  );
+
   return (
     <AppShell>
       <section className="sph-list-page">
@@ -108,6 +168,29 @@ export default async function PengirimanPage() {
             <h1>Pengiriman per SPH</h1>
           </div>
         </div>
+
+        <form className="table-filter-bar">
+          <label>
+            <span>Search</span>
+            <input
+              name="q"
+              placeholder="No SPH, customer, tujuan, status"
+              defaultValue={getSearchParam(params, "q")}
+            />
+          </label>
+          <label>
+            <span>Status</span>
+            <select name="status" defaultValue={statusFilter}>
+              <option value="">Semua Status</option>
+              <option value="pending">Pending</option>
+              <option value="done">Selesai</option>
+            </select>
+          </label>
+          <div className="table-filter-actions">
+            <button type="submit">Filter</button>
+            <Link href="/pengiriman">Reset</Link>
+          </div>
+        </form>
 
         <div className="customer-table-wrap">
           <table className="customer-table shipment-list-table">
@@ -123,8 +206,8 @@ export default async function PengirimanPage() {
               </tr>
             </thead>
             <tbody>
-              {documents.length > 0 ? (
-                documents.map((document) => {
+              {pageRows.length > 0 ? (
+                pageRows.map((document) => {
                   const itemCount = itemCountBySph.get(document.id) ?? 0;
                   const updatedCount = updatedCountBySph.get(document.id) ?? 0;
 
@@ -164,12 +247,17 @@ export default async function PengirimanPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={7}>Belum ada SPH untuk pengiriman.</td>
+                  <td colSpan={7}>Belum ada SPH untuk pengiriman sesuai filter.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={safePage}
+          params={params}
+          totalItems={filteredDocuments.length}
+        />
       </section>
     </AppShell>
   );

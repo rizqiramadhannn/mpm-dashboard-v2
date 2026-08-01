@@ -7,11 +7,12 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { randomId } from "./id";
 
 export const customers = sqliteTable(
   "customers",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: text("id").primaryKey().$defaultFn(randomId),
     code: text("code").notNull(),
     name: text("name").notNull(),
     detailLine1: text("detail_line_1").notNull().default(""),
@@ -30,13 +31,13 @@ export const customers = sqliteTable(
 export const sphDocuments = sqliteTable(
   "sph_documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: text("id").primaryKey().$defaultFn(randomId),
     sphNo: text("sph_no").notNull(),
     yy: text("yy").notNull(),
     mm: text("mm").notNull(),
     sequence: integer("sequence").notNull(),
     customerCode: text("customer_code").notNull(),
-    customerId: integer("customer_id").references(() => customers.id, {
+    customerId: text("customer_id").references(() => customers.id, {
       onDelete: "set null",
     }),
     customerName: text("customer_name").notNull(),
@@ -76,8 +77,8 @@ export const sphDocuments = sqliteTable(
 export const sphItems = sqliteTable(
   "sph_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    sphId: integer("sph_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    sphId: text("sph_id")
       .notNull()
       .references(() => sphDocuments.id, { onDelete: "cascade" }),
     lineNo: integer("line_no").notNull(),
@@ -99,26 +100,37 @@ export const sphItems = sqliteTable(
 export const shipmentJourneys = sqliteTable(
   "shipment_journeys",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    sphItemId: integer("sph_item_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    sphItemId: text("sph_item_id")
       .notNull()
       .references(() => sphItems.id, { onDelete: "cascade" }),
+    splitNo: integer("split_no").notNull().default(1),
+    quantity: integer("quantity").notNull().default(0),
     supplyType: text("supply_type", {
       enum: ["stock", "supplier"],
     })
       .notNull()
       .default("stock"),
-    supplierId: integer("supplier_id").references(() => suppliers.id, {
+    supplierId: text("supplier_id").references(() => suppliers.id, {
       onDelete: "set null",
     }),
     origin: text("origin").notNull().default(""),
     destination: text("destination").notNull().default(""),
     latestStatus: text("latest_status").notNull().default(""),
+    shippingVendor: text("shipping_vendor").notNull().default(""),
+    shippingCost: integer("shipping_cost").notNull().default(0),
+    isShippingPaid: integer("is_shipping_paid", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
-    sphItemIdx: uniqueIndex("shipment_journeys_sph_item_idx").on(table.sphItemId),
+    sphItemIdx: index("shipment_journeys_sph_item_idx").on(table.sphItemId),
+    sphItemSplitIdx: uniqueIndex("shipment_journeys_sph_item_split_idx").on(
+      table.sphItemId,
+      table.splitNo
+    ),
     supplierIdx: index("shipment_journeys_supplier_idx").on(table.supplierId),
   })
 );
@@ -126,9 +138,9 @@ export const shipmentJourneys = sqliteTable(
 export const ttbDocuments = sqliteTable(
   "ttb_documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: text("id").primaryKey().$defaultFn(randomId),
     ttbNo: text("ttb_no").notNull(),
-    sphId: integer("sph_id")
+    sphId: text("sph_id")
       .notNull()
       .references(() => sphDocuments.id, { onDelete: "cascade" }),
     poNo: text("po_no").notNull().default("-"),
@@ -156,11 +168,11 @@ export const ttbDocuments = sqliteTable(
 export const ttbItems = sqliteTable(
   "ttb_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    ttbId: integer("ttb_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    ttbId: text("ttb_id")
       .notNull()
       .references(() => ttbDocuments.id, { onDelete: "cascade" }),
-    sphItemId: integer("sph_item_id").references(() => sphItems.id, {
+    sphItemId: text("sph_item_id").references(() => sphItems.id, {
       onDelete: "set null",
     }),
     lineNo: integer("line_no").notNull(),
@@ -182,12 +194,12 @@ export const ttbItems = sqliteTable(
 export const invoiceDocuments = sqliteTable(
   "invoice_documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: text("id").primaryKey().$defaultFn(randomId),
     invoiceNo: text("invoice_no").notNull(),
-    sphId: integer("sph_id")
+    sphId: text("sph_id")
       .notNull()
       .references(() => sphDocuments.id, { onDelete: "cascade" }),
-    ttbId: integer("ttb_id").references(() => ttbDocuments.id, {
+    ttbId: text("ttb_id").references(() => ttbDocuments.id, {
       onDelete: "set null",
     }),
     poNo: text("po_no").notNull().default("-"),
@@ -200,6 +212,9 @@ export const invoiceDocuments = sqliteTable(
     customerDetailLine2: text("customer_detail_line_2").notNull().default(""),
     customerDetailLine3: text("customer_detail_line_3").notNull().default(""),
     totalAmount: integer("total_amount").notNull().default(0),
+    modalAmount: integer("modal_amount").notNull().default(0),
+    feeAmount: integer("fee_amount").notNull().default(0),
+    kodAmount: integer("kod_amount").notNull().default(0),
     amountInWords: text("amount_in_words").notNull().default(""),
     pdfFileId: text("pdf_file_id"),
     pdfUrl: text("pdf_url"),
@@ -224,11 +239,11 @@ export const invoiceDocuments = sqliteTable(
 export const invoiceItems = sqliteTable(
   "invoice_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    invoiceId: integer("invoice_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    invoiceId: text("invoice_id")
       .notNull()
       .references(() => invoiceDocuments.id, { onDelete: "cascade" }),
-    sphItemId: integer("sph_item_id").references(() => sphItems.id, {
+    sphItemId: text("sph_item_id").references(() => sphItems.id, {
       onDelete: "set null",
     }),
     lineNo: integer("line_no").notNull(),
@@ -253,11 +268,11 @@ export const invoiceItems = sqliteTable(
 export const invoiceLogs = sqliteTable(
   "invoice_logs",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    invoiceId: integer("invoice_id").references(() => invoiceDocuments.id, {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    invoiceId: text("invoice_id").references(() => invoiceDocuments.id, {
       onDelete: "set null",
     }),
-    sphId: integer("sph_id").references(() => sphDocuments.id, {
+    sphId: text("sph_id").references(() => sphDocuments.id, {
       onDelete: "set null",
     }),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -286,7 +301,7 @@ export const invoiceLogs = sqliteTable(
 export const suppliers = sqliteTable(
   "suppliers",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: text("id").primaryKey().$defaultFn(randomId),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
     supplierType: text("supplier_type").notNull().default("Supplier Sparepart"),
@@ -312,8 +327,8 @@ export const suppliers = sqliteTable(
 export const supplierNotes = sqliteTable(
   "supplier_notes",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    supplierId: integer("supplier_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    supplierId: text("supplier_id")
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
     noteNo: text("note_no").notNull(),
@@ -340,6 +355,35 @@ export const supplierNotes = sqliteTable(
     sourceFileSize: integer("source_file_size").notNull().default(0),
     sourceFileBase64: text("source_file_base64").notNull().default(""),
     sourceFileSha256: text("source_file_sha256").notNull().default(""),
+    invoiceFileName: text("invoice_file_name").notNull().default(""),
+    invoiceFileMimeType: text("invoice_file_mime_type").notNull().default(""),
+    invoiceFileSize: integer("invoice_file_size").notNull().default(0),
+    invoiceFileBase64: text("invoice_file_base64").notNull().default(""),
+    invoiceFileUrl: text("invoice_file_url").notNull().default(""),
+    invoiceFileSha256: text("invoice_file_sha256").notNull().default(""),
+    paymentProofFileName: text("payment_proof_file_name").notNull().default(""),
+    paymentProofFileMimeType: text("payment_proof_file_mime_type")
+      .notNull()
+      .default(""),
+    paymentProofFileSize: integer("payment_proof_file_size").notNull().default(0),
+    paymentProofFileBase64: text("payment_proof_file_base64").notNull().default(""),
+    paymentProofFileUrl: text("payment_proof_file_url").notNull().default(""),
+    paymentProofFileSha256: text("payment_proof_file_sha256").notNull().default(""),
+    paymentProofFilesJson: text("payment_proof_files_json", {
+      mode: "json",
+    })
+      .$type<
+        {
+          name: string;
+          mimeType: string;
+          size: number;
+          base64: string;
+          url: string;
+          sha256: string;
+        }[]
+      >()
+      .notNull()
+      .default(sql`'[]'`),
     extractionJson: text("extraction_json", {
       mode: "json",
     }).$type<Record<string, unknown>>(),
@@ -365,8 +409,8 @@ export const supplierNotes = sqliteTable(
 export const supplierNoteItems = sqliteTable(
   "supplier_note_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    supplierNoteId: integer("supplier_note_id")
+    id: text("id").primaryKey().$defaultFn(randomId),
+    supplierNoteId: text("supplier_note_id")
       .notNull()
       .references(() => supplierNotes.id, { onDelete: "cascade" }),
     lineNo: integer("line_no").notNull(),
@@ -396,6 +440,55 @@ export const supplierNoteItems = sqliteTable(
   })
 );
 
+export const paymentRequests = sqliteTable(
+  "payment_requests",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    requestDate: text("request_date").notNull(),
+    sourceFund: text("source_fund").notNull().default(""),
+    amount: integer("amount").notNull().default(0),
+    destinationAccount: text("destination_account").notNull().default(""),
+    description: text("description").notNull().default(""),
+    transactionPurpose: text("transaction_purpose").notNull().default(""),
+    status: text("status").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    requestDateIdx: index("payment_requests_request_date_idx").on(
+      table.requestDate
+    ),
+    sourceFundIdx: index("payment_requests_source_fund_idx").on(table.sourceFund),
+    statusIdx: index("payment_requests_status_idx").on(table.status),
+  })
+);
+
+export const assets = sqliteTable(
+  "assets",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    assetCode: text("asset_code").notNull(),
+    itemName: text("item_name").notNull(),
+    category: text("category").notNull().default(""),
+    assetValue: integer("asset_value").notNull().default(0),
+    currentOrLastPic: text("current_or_last_pic").notNull().default(""),
+    location: text("location").notNull().default(""),
+    condition: text("condition").notNull().default("Baik"),
+    status: text("status").notNull().default("Aktif"),
+    acquisitionDate: text("acquisition_date"),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    assetCodeIdx: uniqueIndex("assets_asset_code_idx").on(table.assetCode),
+    itemNameIdx: index("assets_item_name_idx").on(table.itemName),
+    categoryIdx: index("assets_category_idx").on(table.category),
+    locationIdx: index("assets_location_idx").on(table.location),
+    statusIdx: index("assets_status_idx").on(table.status),
+  })
+);
+
 export const customersRelations = relations(customers, ({ many }) => ({
   sphDocuments: many(sphDocuments),
 }));
@@ -416,7 +509,7 @@ export const sphItemsRelations = relations(sphItems, ({ one, many }) => ({
     fields: [sphItems.sphId],
     references: [sphDocuments.id],
   }),
-  shipmentJourney: one(shipmentJourneys),
+  shipmentJourneys: many(shipmentJourneys),
   ttbItems: many(ttbItems),
   invoiceItems: many(invoiceItems),
 }));

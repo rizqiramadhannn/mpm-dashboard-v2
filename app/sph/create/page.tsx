@@ -2,7 +2,13 @@ import { and, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { getDb } from "../../../db";
-import { customers, sphDocuments, sphItems } from "../../../db/schema";
+import {
+  customers,
+  invoiceDocuments,
+  invoiceItems,
+  sphDocuments,
+  sphItems,
+} from "../../../db/schema";
 import { listCustomers } from "../../customer/data";
 import { CreateSphForm } from "./CreateSphForm";
 
@@ -156,11 +162,36 @@ function toRupiahWords(value: number) {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
+function addDays(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
+  const topMatch = paymentTerm.match(/TOP\s*(\d+)/i);
+
+  if (topMatch) {
+    return addDays(sphDate, Number(topMatch[1]));
+  }
+
+  return sphDate;
+}
+
+function invoiceNoFromSph(sphNo: string) {
+  return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
+}
+
 async function createSphAction(formData: FormData) {
   "use server";
 
   const db = await getDb();
-  const customerId = parseInteger(formData.get("customerId"), "Customer");
+  const customerId = requiredString(formData, "customerId");
   const sphDate = requiredString(formData, "sphDate");
   const paymentTerm = requiredString(formData, "paymentTerm");
   const franco = requiredString(formData, "franco");
@@ -224,6 +255,7 @@ async function createSphAction(formData: FormData) {
   const customerCode = customerInitials(customer.code, customer.name);
   const sphNo = `SPH${yy}${mm}${sequence.toString().padStart(3, "0")}${customerCode}`;
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
 
   const insertedSph = await db
     .insert(sphDocuments)
@@ -243,7 +275,7 @@ async function createSphAction(formData: FormData) {
       sphDate,
       deliveryDate,
       etaDate,
-      paymentDueDate: sphDate,
+      paymentDueDate,
       additionalInfo,
       totalAmount,
       amountInWords: toRupiahWords(totalAmount),
@@ -252,15 +284,54 @@ async function createSphAction(formData: FormData) {
     })
     .returning({ id: sphDocuments.id });
 
-  await db.insert(sphItems).values(
-    items.map((item) => ({
+  const insertedItems = await db
+    .insert(sphItems)
+    .values(
+      items.map((item) => ({
+        sphId: insertedSph[0].id,
+        lineNo: item.lineNo,
+        partNumber: item.partNumber,
+        partName: item.partName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      }))
+    )
+    .returning({
+      id: sphItems.id,
+      lineNo: sphItems.lineNo,
+    });
+  const sphItemIdByLine = new Map(insertedItems.map((item) => [item.lineNo, item.id]));
+
+  const insertedInvoice = await db
+    .insert(invoiceDocuments)
+    .values({
+      amountInWords: toRupiahWords(totalAmount),
+      customerDetailLine1: customer.detailLine1,
+      customerDetailLine2: customer.detailLine2,
+      customerDetailLine3: customer.detailLine3,
+      customerName: customer.name,
+      franco,
+      invoiceDate: sphDate,
+      invoiceNo: invoiceNoFromSph(sphNo),
+      paymentDueDate,
+      paymentTerm,
       sphId: insertedSph[0].id,
+      status: "pending",
+      totalAmount,
+    })
+    .returning({ id: invoiceDocuments.id });
+
+  await db.insert(invoiceItems).values(
+    items.map((item) => ({
+      invoiceId: insertedInvoice[0].id,
       lineNo: item.lineNo,
-      partNumber: item.partNumber,
       partName: item.partName,
+      partNumber: item.partNumber,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
+      sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
       totalPrice: item.totalPrice,
+      unitPrice: item.unitPrice,
     }))
   );
 
@@ -269,7 +340,7 @@ async function createSphAction(formData: FormData) {
 
 export default async function CreateSphPage() {
   let customerOptions: {
-    id: number;
+    id: string;
     code: string;
     name: string;
     detailLine1: string;

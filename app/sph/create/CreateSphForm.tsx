@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 type CustomerOption = {
-  id: number;
+  id: string;
   code: string;
   name: string;
   detailLine1: string;
@@ -16,12 +16,12 @@ type CreateSphFormProps = {
   customers: CustomerOption[];
   initialValues?: {
     additionalInfo: string;
-    customerId: number | null;
+    customerId: string | null;
     deliveryDate: string;
     etaDate: string;
     franco: string;
     items: {
-      id: number;
+      id: string;
       partName: string;
       partNumber: string;
       quantity: number;
@@ -29,7 +29,7 @@ type CreateSphFormProps = {
     }[];
     paymentTerm: string;
     sphDate: string;
-    sphId?: number;
+    sphId?: string;
     sphNo?: string;
   };
   submitLabel?: string;
@@ -37,7 +37,7 @@ type CreateSphFormProps = {
 };
 
 type ItemRow = {
-  id: number;
+  id: string | number;
   partName?: string;
   partNumber?: string;
   quantity?: number;
@@ -67,7 +67,7 @@ export function CreateSphForm({
     setRows((current) => [...current, { id: Date.now() }]);
   }
 
-  function removeRow(id: number) {
+  function removeRow(id: string | number) {
     setRows((current) =>
       current.length === 1 ? current : current.filter((row) => row.id !== id)
     );
@@ -75,9 +75,7 @@ export function CreateSphForm({
 
   return (
     <form action={action} className="sph-form">
-      {initialValues?.sphId ? (
-        <input name="sphId" type="hidden" value={initialValues.sphId} />
-      ) : null}
+      {initialValues ? <input name="sphId" type="hidden" value={initialValues.sphId ?? ""} /> : null}
       <section className="form-section">
         <div className="section-heading">
           <div>

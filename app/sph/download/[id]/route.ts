@@ -373,9 +373,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const sphId = Number(id);
 
-  if (!Number.isInteger(sphId) || sphId <= 0) {
+  if (!id) {
     return new Response("SPH tidak valid.", { status: 400 });
   }
 
@@ -398,7 +397,7 @@ export async function GET(
       staticSnapshotJson: sphDocuments.staticSnapshotJson,
     })
     .from(sphDocuments)
-    .where(eq(sphDocuments.id, sphId))
+    .where(eq(sphDocuments.id, id))
     .limit(1);
 
   if (!document) {
@@ -416,7 +415,7 @@ export async function GET(
       totalPrice: sphItems.totalPrice,
     })
     .from(sphItems)
-    .where(eq(sphItems.sphId, sphId));
+    .where(eq(sphItems.sphId, id));
 
   items.sort((a, b) => a.lineNo - b.lineNo);
 

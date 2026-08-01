@@ -1,11 +1,16 @@
+import type { ReactNode } from "react";
+
 type SupplierRow = {
-  id: number;
+  id: string;
   name: string;
+  supplierType: string;
+  suppliedItems: string;
   contactPerson: string;
   phone: string;
   accountType: string;
   accountNumber: string;
   accountName: string;
+  address: string;
   defaultPaymentTerm: string;
 };
 
@@ -17,6 +22,8 @@ type SupplierFormProps = {
 
 type SupplierListProps = {
   deleteAction: (formData: FormData) => Promise<void>;
+  listControls?: ReactNode;
+  pagination?: ReactNode;
   suppliers: SupplierRow[];
   title?: string;
 };
@@ -116,6 +123,8 @@ export function SupplierForm({
 
 export function SupplierList({
   deleteAction,
+  listControls,
+  pagination,
   suppliers,
   title = "List supplier",
 }: SupplierListProps) {
@@ -128,13 +137,17 @@ export function SupplierList({
         </div>
       </div>
 
+      {listControls}
       <div className="customer-table-wrap">
         <table className="customer-table">
           <thead>
             <tr>
               <th>Nama Supplier</th>
+              <th>Jenis</th>
+              <th>Item Supply</th>
               <th>PIC Supplier</th>
               <th>Kontak PIC</th>
+              <th>Alamat</th>
               <th>Tipe Rekening</th>
               <th>Nomor Rekening</th>
               <th>Nama Rekening</th>
@@ -147,8 +160,11 @@ export function SupplierList({
               suppliers.map((supplier) => (
                 <tr key={supplier.id}>
                   <td>{supplier.name}</td>
+                  <td>{supplier.supplierType || "-"}</td>
+                  <td>{supplier.suppliedItems || "-"}</td>
                   <td>{supplier.contactPerson}</td>
                   <td>{supplier.phone}</td>
+                  <td>{supplier.address || "-"}</td>
                   <td>{supplier.accountType}</td>
                   <td>{supplier.accountNumber}</td>
                   <td>{supplier.accountName}</td>
@@ -168,12 +184,13 @@ export function SupplierList({
               ))
             ) : (
               <tr>
-                <td colSpan={8}>Belum ada supplier.</td>
+                <td colSpan={11}>Tidak ada supplier sesuai filter.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+      {pagination}
     </section>
   );
 }

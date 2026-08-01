@@ -10,7 +10,7 @@ export default async function EditSupplierPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supplier = await getSupplier(Number(id));
+  const supplier = await getSupplier(id);
 
   return (
     <AppShell>
