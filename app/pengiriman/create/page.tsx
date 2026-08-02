@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, like } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -68,10 +68,6 @@ function isEligibleSph(status: string) {
   return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
 }
 
-function formatDateCompact(dateValue: string) {
-  return dateValue.replaceAll("-", "");
-}
-
 function parseSupply(value: string) {
   if (value.startsWith("supplier:")) {
     const supplierId = value.replace("supplier:", "").trim();
@@ -82,6 +78,35 @@ function parseSupply(value: string) {
   }
 
   return { supplierId: null, supplyType: "stock" as const };
+}
+
+function regexEscape(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function nextShipmentNo(
+  db: Awaited<ReturnType<typeof getDb>>,
+  shipmentDate: string,
+  customerCode: string
+) {
+  const yearMonth = shipmentDate.slice(0, 7).replace("-", "");
+
+  if (!/^\d{6}$/.test(yearMonth)) {
+    throw new Error("Tanggal pengiriman tidak valid untuk nomor TTB.");
+  }
+
+  const prefix = `TTB${yearMonth}`;
+  const existingRows = await db
+    .select({ shipmentNo: shipments.shipmentNo })
+    .from(shipments)
+    .where(like(shipments.shipmentNo, `${prefix}%${customerCode}`));
+  const pattern = new RegExp(`^${prefix}(\\d{3})${regexEscape(customerCode)}$`);
+  const maxSequence = existingRows.reduce((max, row) => {
+    const match = row.shipmentNo.match(pattern);
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+
+  return `${prefix}${String(maxSequence + 1).padStart(3, "0")}${customerCode}`;
 }
 
 async function createShipmentAction(formData: FormData) {
@@ -199,13 +224,8 @@ async function createShipmentAction(formData: FormData) {
     });
   }
 
-  const [countRow] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(shipments);
-  const shipmentNo = `TTB${formatDateCompact(shipmentDate)}${String(
-    Number(countRow?.count ?? 0) + 1
-  ).padStart(3, "0")}`;
   const [firstItem] = itemRows;
+  const shipmentNo = await nextShipmentNo(db, shipmentDate, firstItem.customerCode);
   const [insertedShipment] = await db
     .insert(shipments)
     .values({

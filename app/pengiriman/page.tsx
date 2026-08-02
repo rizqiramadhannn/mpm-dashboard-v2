@@ -11,6 +11,16 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function fallbackTtbNo(dateValue: string | null, customerCode: string) {
+  const yearMonth = dateValue?.slice(0, 7).replace("-", "");
+
+  if (/^\d{6}$/.test(yearMonth ?? "")) {
+    return `TTB${yearMonth}001${customerCode}`;
+  }
+
+  return `TTB001${customerCode}`;
+}
+
 type SphItemRow = {
   id: string;
   sphId: string;
@@ -322,7 +332,9 @@ export default async function PengirimanPage({
       shippingCost: shipment?.shippingCost ?? Math.max(current?.shippingCost ?? 0, journey.shippingCost),
       shippingVendor: shipment?.shippingVendor || current?.shippingVendor || journey.shippingVendor,
       sphDocuments: nextDocuments.sort((a, b) => a.sphNo.localeCompare(b.sphNo)),
-      ttbNo: shipment?.shipmentNo || `TTB-${document.sphNo}`,
+      ttbNo:
+        shipment?.shipmentNo ||
+        fallbackTtbNo(document.deliveryDate || document.createdAt, document.customerCode),
       totalQty: (current?.totalQty ?? 0) + journey.quantity,
     });
   }

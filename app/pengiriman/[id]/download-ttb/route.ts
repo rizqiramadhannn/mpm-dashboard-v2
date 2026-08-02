@@ -13,6 +13,7 @@ type SphDocument = {
   sphNo: string;
   ttbNo?: string;
   sphDate: string;
+  customerCode: string;
   customerName: string;
   customerDetailLine1: string;
   customerDetailLine2: string;
@@ -109,8 +110,14 @@ function centerText(x1: number, x2: number, y: number, value: unknown, size = 9,
   return text((x1 + x2 - estimatedWidth) / 2, y, display, size, font);
 }
 
-function ttbNoFromSph(sphNo: string) {
-  return sphNo.startsWith("SPH") ? `TTB${sphNo.slice(3)}` : `TTB-${sphNo}`;
+function fallbackTtbNo(dateValue: string | null, customerCode: string) {
+  const yearMonth = dateValue?.slice(0, 7).replace("-", "");
+
+  if (/^\d{6}$/.test(yearMonth ?? "")) {
+    return `TTB${yearMonth}001${customerCode}`;
+  }
+
+  return `TTB001${customerCode}`;
 }
 
 function splitText(value: string, maxChars: number) {
@@ -185,7 +192,7 @@ function buildTtbItems(items: SphItem[], journeys: JourneyRow[]) {
 }
 
 function buildContent(document: SphDocument, items: TtbItem[]) {
-  const ttbNo = document.ttbNo || ttbNoFromSph(document.sphNo);
+  const ttbNo = document.ttbNo || fallbackTtbNo(document.deliveryDate, document.customerCode);
   const addressLines = [
     "Jl. Trans Sulawesi",
     "Kavling Bintang Putri Blok D No 4",
@@ -382,6 +389,7 @@ export async function GET(
     .select({
       sphNo: sphDocuments.sphNo,
       sphDate: sphDocuments.sphDate,
+      customerCode: sphDocuments.customerCode,
       customerName: sphDocuments.customerName,
       customerDetailLine1: sphDocuments.customerDetailLine1,
       customerDetailLine2: sphDocuments.customerDetailLine2,
@@ -444,7 +452,7 @@ export async function GET(
           .where(inArray(shipments.id, shipmentIds))
           .limit(1)
       : [];
-  const ttbNo = shipment?.shipmentNo || ttbNoFromSph(document.sphNo);
+  const ttbNo = shipment?.shipmentNo || fallbackTtbNo(document.deliveryDate, document.customerCode);
 
   return new Response(createPdf({ ...document, ttbNo }, buildTtbItems(items, journeys)), {
     headers: {
