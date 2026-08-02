@@ -1175,6 +1175,38 @@ a {
   font-weight: 800;
 }
 
+.item-modal-trigger {
+  background: #eef7f6;
+  border: 1px solid #c9e7e2;
+  border-radius: 8px;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.item-modal-trigger:hover {
+  background: #dcf3ef;
+}
+
+.item-list-modal {
+  height: auto;
+  max-height: min(760px, 88vh);
+}
+
+.item-list-modal-body {
+  overflow: auto;
+  padding: 14px;
+}
+
+.item-list-modal-table {
+  min-width: 760px;
+}
+
 .icon-actions {
   align-items: center;
 }

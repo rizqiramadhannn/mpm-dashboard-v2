@@ -5,6 +5,7 @@ import { AppShell } from "../../components/AppShell";
 import { ConfirmForm } from "../../components/ConfirmForm";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
+import { ItemListModal } from "./ItemListModal";
 import { getDb } from "../../../db";
 import { invoiceDocuments, invoiceItems, sphDocuments, sphItems } from "../../../db/schema";
 
@@ -557,18 +558,7 @@ export default async function ListSphPage({
                       <td>{document.paymentTerm}</td>
                       <td>{formatRupiah(document.totalAmount)}</td>
                       <td>
-                        <details className="item-preview">
-                          <summary>{items.length} item</summary>
-                          <div>
-                            {items.map((item) => (
-                              <p key={item.id}>
-                                <span>{item.lineNo}.</span> {item.partNumber || "-"} -{" "}
-                                {item.partName} ({item.quantity} x{" "}
-                                {formatRupiah(item.unitPrice)})
-                              </p>
-                            ))}
-                          </div>
-                        </details>
+                        <ItemListModal items={items} sphNo={document.sphNo} />
                       </td>
                       <td>
                         <span className={`status-badge ${status}`}>
