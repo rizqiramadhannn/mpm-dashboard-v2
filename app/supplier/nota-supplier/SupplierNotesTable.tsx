@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SupplierNoteItemListModal } from "./SupplierNoteItemListModal";
 
 type SupplierNoteFile = {
   name: string;
@@ -14,7 +15,6 @@ type SupplierNote = {
   noteNo: string;
   noteDate: string | null;
   supplierName: string;
-  category: string;
   amount: number;
   paidAmount: number;
   paymentStatus: string;
@@ -36,6 +36,7 @@ type SupplierNote = {
     partNumber: string;
     description: string;
     quantity: number;
+    totalPrice: number;
     uom: string;
     unitPrice: number;
   }[];
@@ -307,7 +308,6 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                     <td>
                       <div className="stacked-cell">
                         <strong>{note.supplierName}</strong>
-                        <span>{note.category}</span>
                       </div>
                     </td>
                     <td>{note.flag}</td>
@@ -361,18 +361,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                       </div>
                     </td>
                     <td>
-                      <details className="item-preview">
-                        <summary>{note.items.length} item</summary>
-                        <div>
-                          {note.items.map((item) => (
-                            <p key={item.id}>
-                              <span>{item.lineNo}.</span> {item.partNumber || "-"} -{" "}
-                              {item.description} ({item.quantity} {item.uom} x{" "}
-                              {formatRupiah(item.unitPrice)})
-                            </p>
-                          ))}
-                        </div>
-                      </details>
+                      <SupplierNoteItemListModal items={note.items} noteNo={note.noteNo} />
                     </td>
                     <td>
                       <div className="file-action-cell">

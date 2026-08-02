@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ConfirmForm } from "../../components/ConfirmForm";
+import { defaultPaymentTerm, paymentTermOptions } from "../../components/paymentTerms";
 
 type CustomerRow = {
   id: string | number;
@@ -9,6 +10,7 @@ type CustomerRow = {
   detailLine2: string;
   detailLine3: string;
   contactName: string;
+  defaultPaymentTerm: string;
   monthlyCreditLimit: number;
   sphCreditLimit: number;
 };
@@ -121,6 +123,21 @@ export function CustomerForm({
           </label>
 
           <label>
+            <span>Payment Term</span>
+            <select
+              name="defaultPaymentTerm"
+              required
+              defaultValue={customer?.defaultPaymentTerm || defaultPaymentTerm}
+            >
+              {paymentTermOptions.map((term) => (
+                <option key={term} value={term}>
+                  {term}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             <span>Limit Bulanan</span>
             <input
               name="monthlyCreditLimit"
@@ -159,6 +176,7 @@ export function CustomerForm({
                   <th>Detail 2</th>
                   <th>Detail 3</th>
                   <th>PIC</th>
+                  <th>Payment Term</th>
                   <th>Limit Bulanan</th>
                   <th>Limit Per SPH</th>
                   <th>Action</th>
@@ -174,6 +192,7 @@ export function CustomerForm({
                       <td>{customer.detailLine2}</td>
                       <td>{customer.detailLine3}</td>
                       <td>{customer.contactName}</td>
+                      <td>{customer.defaultPaymentTerm}</td>
                       <td>{formatMoney(customer.monthlyCreditLimit)}</td>
                       <td>
                         {customer.sphCreditLimit > 0
@@ -189,7 +208,7 @@ export function CustomerForm({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9}>Tidak ada customer sesuai filter.</td>
+                    <td colSpan={10}>Tidak ada customer sesuai filter.</td>
                   </tr>
                 )}
               </tbody>

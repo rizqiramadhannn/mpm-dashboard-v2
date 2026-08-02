@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ConfirmForm } from "../../components/ConfirmForm";
+import { defaultPaymentTerm, paymentTermOptions } from "../../components/paymentTerms";
 
 type SupplierRow = {
   id: string;
@@ -114,12 +115,23 @@ export function SupplierForm({
 
         <label>
           <span>TOP Supplier</span>
-          <input
+          <select
             name="defaultPaymentTerm"
             required
-            defaultValue={supplier?.defaultPaymentTerm ?? ""}
-            placeholder="TOP 30 hari"
-          />
+            defaultValue={supplier?.defaultPaymentTerm || defaultPaymentTerm}
+          >
+            {paymentTermOptions.map((term) => (
+              <option key={term} value={term}>
+                {term}
+              </option>
+            ))}
+            {supplier?.defaultPaymentTerm &&
+            !paymentTermOptions.includes(
+              supplier.defaultPaymentTerm as (typeof paymentTermOptions)[number]
+            ) ? (
+              <option value={supplier.defaultPaymentTerm}>{supplier.defaultPaymentTerm}</option>
+            ) : null}
+          </select>
         </label>
 
         <button type="submit">{supplier ? "Simpan supplier" : "Buat supplier"}</button>

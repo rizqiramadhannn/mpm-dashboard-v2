@@ -1,6 +1,11 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { supplierNoteItems, supplierNotes, suppliers } from "../../../db/schema";
+import {
+  supplierNoteImports,
+  supplierNoteItems,
+  supplierNotes,
+  suppliers,
+} from "../../../db/schema";
 
 type SupplierNoteFileInput = {
   name?: unknown;
@@ -59,6 +64,13 @@ export type CreatedSupplierNote = {
 export type SupplierNoteFilePayload = {
   invoiceFile?: SupplierNoteFileInput;
   paymentProofFiles?: unknown;
+};
+
+export type SupplierNoteImportFileInput = {
+  name: string;
+  mimeType: string;
+  size: number;
+  base64: string;
 };
 
 function asString(value: unknown, fallback = "") {
@@ -380,6 +392,177 @@ export async function createSupplierNote(payload: SupplierNotePayload) {
     noteNo,
     itemCount: items.length,
   } satisfies CreatedSupplierNote;
+}
+
+export async function createSupplierNoteImport({
+  customerId,
+  customerName,
+  file,
+  flag,
+  paymentTerm,
+  purchasePurpose,
+}: {
+  customerId?: unknown;
+  customerName?: unknown;
+  file: SupplierNoteImportFileInput;
+  flag: unknown;
+  paymentTerm?: unknown;
+  purchasePurpose?: unknown;
+}) {
+  const cleanFlag = asString(flag, "MPM") || "MPM";
+  const cleanCustomerName = requiredString(customerName, "customerName");
+  const cleanPaymentTerm = asString(paymentTerm, "CBD") || "CBD";
+  const cleanPurchasePurpose =
+    asString(purchasePurpose, "Pembelian Langsung") || "Pembelian Langsung";
+  const cleanFile = fileInput(file);
+
+  if (!cleanFile.hasFile) {
+    throw new Error("File nota wajib diupload.");
+  }
+
+  if (
+    cleanFile.mimeType !== "application/pdf" &&
+    !cleanFile.mimeType.startsWith("image/")
+  ) {
+    throw new Error("File harus PDF atau image.");
+  }
+
+  const storedFile = await storedFileFromInput(cleanFile);
+  const db = await getDb();
+  const [row] = await db
+    .insert(supplierNoteImports)
+    .values({
+      fileBase64: storedFile.base64,
+      fileMimeType: storedFile.mimeType,
+      fileName: storedFile.name || "nota",
+      fileSha256: storedFile.sha256,
+      fileSize: storedFile.size,
+      flag: cleanFlag,
+      customerId: asString(customerId) || null,
+      customerName: cleanCustomerName,
+      paymentTerm: cleanPaymentTerm,
+      purchasePurpose: cleanPurchasePurpose,
+      status: "pending",
+    })
+    .returning({
+      createdAt: supplierNoteImports.createdAt,
+      customerId: supplierNoteImports.customerId,
+      customerName: supplierNoteImports.customerName,
+      fileMimeType: supplierNoteImports.fileMimeType,
+      fileName: supplierNoteImports.fileName,
+      fileSize: supplierNoteImports.fileSize,
+      flag: supplierNoteImports.flag,
+      id: supplierNoteImports.id,
+      paymentTerm: supplierNoteImports.paymentTerm,
+      purchasePurpose: supplierNoteImports.purchasePurpose,
+      status: supplierNoteImports.status,
+    });
+
+  return row;
+}
+
+export async function listPendingSupplierNoteImports() {
+  const db = await getDb();
+
+  return db
+    .select({
+      createdAt: supplierNoteImports.createdAt,
+      customerId: supplierNoteImports.customerId,
+      customerName: supplierNoteImports.customerName,
+      fileMimeType: supplierNoteImports.fileMimeType,
+      fileName: supplierNoteImports.fileName,
+      fileSize: supplierNoteImports.fileSize,
+      flag: supplierNoteImports.flag,
+      id: supplierNoteImports.id,
+      paymentTerm: supplierNoteImports.paymentTerm,
+      purchasePurpose: supplierNoteImports.purchasePurpose,
+      status: supplierNoteImports.status,
+    })
+    .from(supplierNoteImports)
+    .where(eq(supplierNoteImports.status, "pending"))
+    .orderBy(desc(supplierNoteImports.createdAt), desc(supplierNoteImports.id));
+}
+
+export async function getSupplierNoteImportFile(id: string) {
+  const db = await getDb();
+  const [file] = await db
+    .select({
+      base64: supplierNoteImports.fileBase64,
+      fileName: supplierNoteImports.fileName,
+      flag: supplierNoteImports.flag,
+      mimeType: supplierNoteImports.fileMimeType,
+      status: supplierNoteImports.status,
+    })
+    .from(supplierNoteImports)
+    .where(eq(supplierNoteImports.id, id))
+    .limit(1);
+
+  return file ?? null;
+}
+
+export async function importSupplierNoteFromJson(id: string, payload: SupplierNotePayload) {
+  const db = await getDb();
+  const [pendingImport] = await db
+    .select({
+      fileBase64: supplierNoteImports.fileBase64,
+      fileMimeType: supplierNoteImports.fileMimeType,
+      fileName: supplierNoteImports.fileName,
+      fileSize: supplierNoteImports.fileSize,
+      flag: supplierNoteImports.flag,
+      customerName: supplierNoteImports.customerName,
+      paymentTerm: supplierNoteImports.paymentTerm,
+      purchasePurpose: supplierNoteImports.purchasePurpose,
+      status: supplierNoteImports.status,
+    })
+    .from(supplierNoteImports)
+    .where(eq(supplierNoteImports.id, id))
+    .limit(1);
+
+  if (!pendingImport) {
+    throw new Error("Pending nota tidak ditemukan.");
+  }
+
+  if (pendingImport.status !== "pending") {
+    throw new Error("Pending nota sudah diproses.");
+  }
+
+  const note = await createSupplierNote({
+    ...payload,
+    customerName:
+      asString(payload.customerName, pendingImport.customerName) ||
+      pendingImport.customerName,
+    file: {
+      base64: pendingImport.fileBase64,
+      mimeType: pendingImport.fileMimeType,
+      name: pendingImport.fileName,
+      size: pendingImport.fileSize,
+    },
+    flag: asString(payload.flag, pendingImport.flag) || pendingImport.flag,
+    invoiceFile: {
+      base64: pendingImport.fileBase64,
+      mimeType: pendingImport.fileMimeType,
+      name: pendingImport.fileName,
+      size: pendingImport.fileSize,
+    },
+    paymentTerm:
+      asString(payload.paymentTerm, pendingImport.paymentTerm) ||
+      pendingImport.paymentTerm,
+    purchasePurpose:
+      asString(payload.purchasePurpose, pendingImport.purchasePurpose) ||
+      pendingImport.purchasePurpose,
+  });
+
+  await db
+    .update(supplierNoteImports)
+    .set({
+      importedJson: payload as Record<string, unknown>,
+      importedSupplierNoteId: note.id,
+      status: "imported",
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(supplierNoteImports.id, id));
+
+  return note;
 }
 
 export async function listSupplierNotes() {

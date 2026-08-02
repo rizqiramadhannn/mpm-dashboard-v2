@@ -19,6 +19,7 @@ export const customers = sqliteTable(
     detailLine2: text("detail_line_2").notNull().default(""),
     detailLine3: text("detail_line_3").notNull().default(""),
     contactName: text("contact_name").notNull().default(""),
+    defaultPaymentTerm: text("default_payment_term").notNull().default("CBD"),
     monthlyCreditLimit: integer("credit_limit").notNull().default(15_000_000),
     sphCreditLimit: integer("sph_credit_limit").notNull().default(0),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -475,6 +476,44 @@ export const supplierNoteItems = sqliteTable(
   })
 );
 
+export const supplierNoteImports = sqliteTable(
+  "supplier_note_imports",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    flag: text("flag").notNull().default("MPM"),
+    customerId: text("customer_id"),
+    customerName: text("customer_name").notNull().default(""),
+    paymentTerm: text("payment_term").notNull().default("CBD"),
+    purchasePurpose: text("purchase_purpose").notNull().default("Pembelian Langsung"),
+    status: text("status", {
+      enum: ["pending", "imported", "cancelled"],
+    })
+      .notNull()
+      .default("pending"),
+    fileName: text("file_name").notNull(),
+    fileMimeType: text("file_mime_type").notNull(),
+    fileSize: integer("file_size").notNull().default(0),
+    fileBase64: text("file_base64").notNull().default(""),
+    fileSha256: text("file_sha256").notNull().default(""),
+    importedSupplierNoteId: text("imported_supplier_note_id").references(
+      () => supplierNotes.id,
+      { onDelete: "set null" }
+    ),
+    importedJson: text("imported_json", {
+      mode: "json",
+    }).$type<Record<string, unknown>>(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    statusIdx: index("supplier_note_imports_status_idx").on(table.status),
+    flagIdx: index("supplier_note_imports_flag_idx").on(table.flag),
+    importedSupplierNoteIdx: index("supplier_note_imports_note_idx").on(
+      table.importedSupplierNoteId
+    ),
+  })
+);
+
 export const paymentRequests = sqliteTable(
   "payment_requests",
   {
@@ -633,6 +672,13 @@ export const supplierNotesRelations = relations(supplierNotes, ({ one, many }) =
 export const supplierNoteItemsRelations = relations(supplierNoteItems, ({ one }) => ({
   note: one(supplierNotes, {
     fields: [supplierNoteItems.supplierNoteId],
+    references: [supplierNotes.id],
+  }),
+}));
+
+export const supplierNoteImportsRelations = relations(supplierNoteImports, ({ one }) => ({
+  importedNote: one(supplierNotes, {
+    fields: [supplierNoteImports.importedSupplierNoteId],
     references: [supplierNotes.id],
   }),
 }));

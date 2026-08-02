@@ -2,8 +2,11 @@ import Link from "next/link";
 import { AppShell } from "../../components/AppShell";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
+import { listCustomers } from "../../customer/data";
+import { listSuppliers } from "../data";
 import { listSupplierNotes } from "../notes/data";
-import { SupplierNotesTable } from "./SupplierNotesTable";
+import { SupplierNoteImportControls } from "./SupplierNoteImportControls";
+import { SupplierNotesTabs } from "./SupplierNotesTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -37,17 +40,17 @@ export default async function SupplierNotesPage({
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const paymentFilter = getSearchParam(params, "payment");
   const flagFilter = getSearchParam(params, "flag");
-  const categoryFilter = getSearchParam(params, "category");
   const fromDate = getSearchParam(params, "from");
   const toDate = getSearchParam(params, "to");
-  const notes = await listSupplierNotes();
+  const [notes, customers, suppliers] = await Promise.all([
+    listSupplierNotes(),
+    listCustomers(),
+    listSuppliers(),
+  ]);
   const paymentOptions = [...new Set(notes.map((note) => note.paymentStatus))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
   const flagOptions = [...new Set(notes.map((note) => note.flag))]
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-  const categoryOptions = [...new Set(notes.map((note) => note.category))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
   const filteredNotes = notes.filter((note) => {
@@ -76,10 +79,9 @@ export default async function SupplierNotesPage({
         ? note.paymentStatus === "BELUM BAYAR" || note.paymentStatus === "DP"
         : note.paymentStatus === paymentFilter);
     const matchesFlag = !flagFilter || note.flag === flagFilter;
-    const matchesCategory = !categoryFilter || note.category === categoryFilter;
     const matchesDate = isWithinDateRange(note.noteDate, fromDate, toDate);
 
-    return matchesQuery && matchesPayment && matchesFlag && matchesCategory && matchesDate;
+    return matchesQuery && matchesPayment && matchesFlag && matchesDate;
   });
   const { pageRows, safePage } = paginateRows(filteredNotes, getCurrentPage(params));
 
@@ -91,6 +93,7 @@ export default async function SupplierNotesPage({
             <p className="page-kicker">Supplier</p>
             <h1>List Nota Supplier</h1>
           </div>
+          <SupplierNoteImportControls customers={customers} suppliers={suppliers} />
         </div>
 
         <form className="table-filter-bar">
@@ -125,17 +128,6 @@ export default async function SupplierNotesPage({
               ))}
             </select>
           </label>
-          <label>
-            <span>Category</span>
-            <select name="category" defaultValue={categoryFilter}>
-              <option value="">Semua Category</option>
-              {categoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </label>
           <DateRangeFilter from={fromDate} to={toDate} />
           <div className="table-filter-actions">
             <button type="submit">Filter</button>
@@ -143,12 +135,11 @@ export default async function SupplierNotesPage({
           </div>
         </form>
 
-        <SupplierNotesTable
+        <SupplierNotesTabs
           key={[
             query,
             paymentFilter,
             flagFilter,
-            categoryFilter,
             fromDate,
             toDate,
             safePage,
