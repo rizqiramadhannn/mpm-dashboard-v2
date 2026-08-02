@@ -13,8 +13,19 @@ type ShipmentMoneyControlProps = {
 
 type ShipmentProofUploadProps = {
   disabled?: boolean;
-  paymentProofCount: number;
+  paymentProofFiles: ShipmentPaymentProofFile[];
   shipmentId: string | null;
+  ttbNo: string;
+};
+
+type ShipmentPaymentProofFile = {
+  mimeType: string;
+  name: string;
+  size: number;
+};
+
+type PreviewState = {
+  selectedIndex: number;
 };
 
 function formatMoney(value: number) {
@@ -23,6 +34,33 @@ function formatMoney(value: number) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value);
+}
+
+function fileLabel(name: string, size: number) {
+  const sizeKb = size ? `${Math.ceil(size / 1024).toLocaleString("id-ID")} KB` : "";
+
+  return [name, sizeKb].filter(Boolean).join(" - ");
+}
+
+function FileIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M14 2v6h6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
 }
 
 async function postShipmentPayment(
@@ -114,11 +152,13 @@ export function ShipmentMoneyControl({
 
 export function ShipmentProofUpload({
   disabled = false,
-  paymentProofCount,
+  paymentProofFiles,
   shipmentId,
+  ttbNo,
 }: ShipmentProofUploadProps) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
 
   async function upload(files: FileList | null) {
     if (!shipmentId || disabled || !files?.length) {
@@ -143,21 +183,73 @@ export function ShipmentProofUpload({
     return <span className="file-meta">-</span>;
   }
 
+  const previewFile = preview ? paymentProofFiles[preview.selectedIndex] : null;
+  const previewUrl =
+    preview && previewFile
+      ? `/pengiriman/payment-proof/${shipmentId}/download?index=${preview.selectedIndex}&inline=1`
+      : "";
+
   return (
-    <div className="shipment-proof-upload">
-      <label className="file-upload-button">
-        <input
-          disabled={disabled || uploading}
-          multiple
-          onChange={(event) => {
-            void upload(event.currentTarget.files);
-            event.currentTarget.value = "";
-          }}
-          type="file"
-        />
-        {uploading ? "Uploading..." : "Upload"}
-      </label>
-      <span className="file-meta">{paymentProofCount} file</span>
-    </div>
+    <>
+      <div className="file-action-cell shipment-proof-upload">
+        {paymentProofFiles.length > 0 ? (
+          <button
+            className="file-preview-button"
+            onClick={() => setPreview({ selectedIndex: 0 })}
+            title={fileLabel(paymentProofFiles[0]?.name || "Bukti Bayar", paymentProofFiles[0]?.size || 0)}
+            type="button"
+          >
+            <FileIcon />
+            <span>
+              Bukti Bayar{paymentProofFiles.length > 1 ? ` (${paymentProofFiles.length})` : ""}
+            </span>
+          </button>
+        ) : null}
+        <label className="file-upload-button">
+          <input
+            accept="application/pdf,image/*"
+            disabled={disabled || uploading}
+            multiple
+            onChange={(event) => {
+              void upload(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+            type="file"
+          />
+          {uploading ? "Uploading..." : "Upload"}
+        </label>
+      </div>
+
+      {preview && previewFile ? (
+        <div className="preview-modal-backdrop" role="presentation">
+          <div aria-modal="true" className="preview-modal" role="dialog">
+            <div className="preview-modal-header">
+              <div className="preview-modal-title">
+                <strong>Bukti Bayar - {ttbNo}</strong>
+                <span>{fileLabel(previewFile.name, previewFile.size)}</span>
+              </div>
+              <button onClick={() => setPreview(null)} type="button">
+                Tutup
+              </button>
+            </div>
+            {paymentProofFiles.length > 1 ? (
+              <div className="preview-file-tabs">
+                {paymentProofFiles.map((file, index) => (
+                  <button
+                    className={index === preview.selectedIndex ? "active" : ""}
+                    key={`${file.name}-${index}`}
+                    onClick={() => setPreview({ selectedIndex: index })}
+                    type="button"
+                  >
+                    {file.name || `Bukti Bayar ${index + 1}`}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <iframe className="preview-modal-frame" src={previewUrl} title={`Bukti Bayar ${ttbNo}`} />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -64,6 +64,7 @@ type ShipmentGroup = {
   latestStatus: string;
   paidAmount: number;
   paymentProofCount: number;
+  paymentProofFiles: ShipmentPaymentProofFile[];
   receivedQty: number;
   shipmentId: string | null;
   shippingCost: number;
@@ -71,6 +72,12 @@ type ShipmentGroup = {
   sphDocuments: DocumentRow[];
   ttbNo: string;
   totalQty: number;
+};
+
+type ShipmentPaymentProofFile = {
+  mimeType: string;
+  name: string;
+  size: number;
 };
 
 type ShipmentHeader = {
@@ -95,6 +102,18 @@ type ShipmentHeader = {
   shippingCost: number;
   shippingVendor: string;
 };
+
+function shipmentPaymentProofFiles(
+  files: ShipmentHeader["paymentProofFilesJson"]
+): ShipmentPaymentProofFile[] {
+  return Array.isArray(files)
+    ? files.map((file) => ({
+        mimeType: file.mimeType,
+        name: file.name,
+        size: file.size,
+      }))
+    : [];
+}
 
 function getSearchParam(
   params: Record<string, string | string[] | undefined>,
@@ -310,6 +329,9 @@ export default async function PengirimanPage({
     const key = shipmentKey(document, journey, sphId);
     const current = shipmentGroupsByKey.get(key);
     const shipment = journey.shipmentId ? shipmentById.get(journey.shipmentId) : undefined;
+    const paymentProofFiles = shipmentPaymentProofFiles(
+      shipment?.paymentProofFilesJson ?? null
+    );
     const nextDocuments = current?.sphDocuments.some((sph) => sph.id === document.id)
       ? current.sphDocuments
       : [...(current?.sphDocuments ?? []), document];
@@ -325,8 +347,9 @@ export default async function PengirimanPage({
       latestStatus:
         shipment?.latestStatus || journey.latestStatus.trim() || current?.latestStatus || "-",
       paidAmount: shipment?.paidAmount ?? current?.paidAmount ?? 0,
-      paymentProofCount:
-        shipment?.paymentProofFilesJson?.length ?? current?.paymentProofCount ?? 0,
+      paymentProofCount: paymentProofFiles.length || current?.paymentProofCount || 0,
+      paymentProofFiles:
+        paymentProofFiles.length > 0 ? paymentProofFiles : (current?.paymentProofFiles ?? []),
       receivedQty: (current?.receivedQty ?? 0) + (journey.customerReceived ? journey.quantity : 0),
       shipmentId: shipment?.id ?? null,
       shippingCost: shipment?.shippingCost ?? Math.max(current?.shippingCost ?? 0, journey.shippingCost),
@@ -506,8 +529,9 @@ export default async function PengirimanPage({
                       </td>
                       <td>
                         <ShipmentProofUpload
-                          paymentProofCount={shipment.paymentProofCount}
+                          paymentProofFiles={shipment.paymentProofFiles}
                           shipmentId={shipment.shipmentId}
+                          ttbNo={shipment.ttbNo}
                         />
                       </td>
                       <td>{shipment.latestStatus || "-"}</td>
