@@ -3,21 +3,87 @@ import Link from "next/link";
 import { AppShell } from "../components/AppShell";
 import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
-import { shipmentJourneys, sphDocuments, sphItems } from "../../db/schema";
+import { shipmentJourneys, shipments, sphDocuments, sphItems } from "../../db/schema";
+import {
+  ShipmentMoneyControl,
+  ShipmentProofUpload,
+} from "./ShipmentPaymentControls";
 
 export const dynamic = "force-dynamic";
 
 type SphItemRow = {
   id: string;
   sphId: string;
+  partName: string;
+  partNumber: string;
   quantity: number;
 };
 
 type JourneyRow = {
+  batchNo: number;
+  destination: string;
+  shippingCost: number;
+  shippingVendor: string;
   sphItemId: string;
   latestStatus: string;
   quantity: number;
   customerReceived: boolean;
+  shipmentId: string | null;
+};
+
+type DocumentRow = {
+  createdAt: string;
+  customerCode: string;
+  customerName: string;
+  deliveryDate: string | null;
+  etaDate: string | null;
+  franco: string;
+  id: string;
+  sphNo: string;
+  status: string;
+};
+
+type ShipmentGroup = {
+  customerCode: string;
+  customerName: string;
+  deliveryDate: string | null;
+  destination: string;
+  etaDate: string | null;
+  itemCount: number;
+  key: string;
+  latestStatus: string;
+  paidAmount: number;
+  paymentProofCount: number;
+  receivedQty: number;
+  shipmentId: string | null;
+  shippingCost: number;
+  shippingVendor: string;
+  sphDocuments: DocumentRow[];
+  ttbNo: string;
+  totalQty: number;
+};
+
+type ShipmentHeader = {
+  customerCode: string;
+  customerName: string;
+  destination: string;
+  id: string;
+  isShippingPaid: boolean;
+  latestStatus: string;
+  paidAmount: number;
+  paymentProofFilesJson:
+    | {
+        base64: string;
+        mimeType: string;
+        name: string;
+        sha256: string;
+        size: number;
+      }[]
+    | null;
+  shipmentDate: string;
+  shipmentNo: string;
+  shippingCost: number;
+  shippingVendor: string;
 };
 
 function getSearchParam(
@@ -50,6 +116,41 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
+function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="M12 20h9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="m16.5 3.5 4 4L8 20H4v-4L16.5 3.5Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 function isShipmentFinal(status: string) {
   const normalized = status.trim().toLowerCase();
 
@@ -64,15 +165,31 @@ function isShipmentFinal(status: string) {
   ].includes(normalized);
 }
 
-function normalizedSphStatus(status: string) {
-  const aliases: Record<string, string> = {
-    cancelled: "cancel",
-    draft: "cek_harga",
-    invoiced: "menunggu_pengiriman",
-    pending_invoice: "menunggu_pengiriman",
-  };
+function shipmentKey(document: DocumentRow, journey: JourneyRow, sphId: string) {
+  if (journey.shipmentId) {
+    return `shipment:${journey.shipmentId}`;
+  }
 
-  return aliases[status] ?? status;
+  const hasSharedShipmentMarkers =
+    journey.shippingVendor.trim() ||
+    journey.destination.trim() ||
+    journey.shippingCost > 0;
+  const vendor = hasSharedShipmentMarkers ? journey.shippingVendor.trim() : sphId;
+  const destination = hasSharedShipmentMarkers
+    ? journey.destination.trim() || document.franco
+    : sphId;
+
+  return [
+    document.customerCode,
+    document.deliveryDate ?? "",
+    journey.batchNo || 1,
+    vendor,
+    destination,
+  ].join("|");
+}
+
+function groupTitle(group: ShipmentGroup) {
+  return group.shippingVendor || "Vendor belum diisi";
 }
 
 export default async function PengirimanPage({
@@ -84,7 +201,7 @@ export default async function PengirimanPage({
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const statusFilter = getSearchParam(params, "status");
   const db = await getDb();
-  const documents = await db
+  const documents: DocumentRow[] = await db
     .select({
       id: sphDocuments.id,
       sphNo: sphDocuments.sphNo,
@@ -106,6 +223,8 @@ export default async function PengirimanPage({
           .select({
             id: sphItems.id,
             sphId: sphItems.sphId,
+            partName: sphItems.partName,
+            partNumber: sphItems.partNumber,
             quantity: sphItems.quantity,
           })
           .from(sphItems)
@@ -117,85 +236,143 @@ export default async function PengirimanPage({
     itemIds.length > 0
       ? await db
           .select({
+            batchNo: shipmentJourneys.batchNo,
+            destination: shipmentJourneys.destination,
+            shippingCost: shipmentJourneys.shippingCost,
+            shippingVendor: shipmentJourneys.shippingVendor,
             sphItemId: shipmentJourneys.sphItemId,
             latestStatus: shipmentJourneys.latestStatus,
             quantity: shipmentJourneys.quantity,
             customerReceived: shipmentJourneys.customerReceived,
+            shipmentId: shipmentJourneys.shipmentId,
           })
           .from(shipmentJourneys)
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
+  const shipmentIds = [
+    ...new Set(
+      journeyRows
+        .map((journey) => journey.shipmentId)
+        .filter((shipmentId): shipmentId is string => Boolean(shipmentId))
+    ),
+  ];
+  const shipmentHeaders: ShipmentHeader[] =
+    shipmentIds.length > 0
+      ? await db
+          .select({
+            customerCode: shipments.customerCode,
+            customerName: shipments.customerName,
+            destination: shipments.destination,
+            id: shipments.id,
+            isShippingPaid: shipments.isShippingPaid,
+            latestStatus: shipments.latestStatus,
+            paidAmount: shipments.paidAmount,
+            paymentProofFilesJson: shipments.paymentProofFilesJson,
+            shipmentDate: shipments.shipmentDate,
+            shipmentNo: shipments.shipmentNo,
+            shippingCost: shipments.shippingCost,
+            shippingVendor: shipments.shippingVendor,
+          })
+          .from(shipments)
+          .where(inArray(shipments.id, shipmentIds))
+      : [];
 
-  const itemQtyBySph = new Map<string, number>();
+  const documentById = new Map(documents.map((document) => [document.id, document]));
+  const shipmentById = new Map(shipmentHeaders.map((shipment) => [shipment.id, shipment]));
   const sphIdByItem = new Map<string, string>();
+  const itemById = new Map(itemRows.map((item) => [item.id, item]));
 
   for (const item of itemRows) {
     sphIdByItem.set(item.id, item.sphId);
-    itemQtyBySph.set(item.sphId, (itemQtyBySph.get(item.sphId) ?? 0) + item.quantity);
   }
 
-  const receivedQtyBySph = new Map<string, number>();
-  const latestStatusBySph = new Map<string, string>();
+  const shipmentGroupsByKey = new Map<string, ShipmentGroup>();
 
   for (const journey of journeyRows) {
     const sphId = sphIdByItem.get(journey.sphItemId);
+    const item = itemById.get(journey.sphItemId);
+    const document = sphId ? documentById.get(sphId) : undefined;
 
-    if (!sphId) {
+    if (!sphId || !item || !document) {
       continue;
     }
 
-    if (journey.customerReceived) {
-      receivedQtyBySph.set(
-        sphId,
-        (receivedQtyBySph.get(sphId) ?? 0) + journey.quantity
-      );
-    }
+    const key = shipmentKey(document, journey, sphId);
+    const current = shipmentGroupsByKey.get(key);
+    const shipment = journey.shipmentId ? shipmentById.get(journey.shipmentId) : undefined;
+    const nextDocuments = current?.sphDocuments.some((sph) => sph.id === document.id)
+      ? current.sphDocuments
+      : [...(current?.sphDocuments ?? []), document];
 
-    if (journey.latestStatus.trim()) {
-      latestStatusBySph.set(sphId, journey.latestStatus.trim());
-    }
+    shipmentGroupsByKey.set(key, {
+      customerCode: shipment?.customerCode || document.customerCode,
+      customerName: shipment?.customerName || document.customerName,
+      deliveryDate: shipment?.shipmentDate || document.deliveryDate,
+      destination: shipment?.destination || journey.destination || document.franco,
+      etaDate: shipment?.shipmentDate || document.etaDate,
+      itemCount: (current?.itemCount ?? 0) + 1,
+      key,
+      latestStatus:
+        shipment?.latestStatus || journey.latestStatus.trim() || current?.latestStatus || "-",
+      paidAmount: shipment?.paidAmount ?? current?.paidAmount ?? 0,
+      paymentProofCount:
+        shipment?.paymentProofFilesJson?.length ?? current?.paymentProofCount ?? 0,
+      receivedQty: (current?.receivedQty ?? 0) + (journey.customerReceived ? journey.quantity : 0),
+      shipmentId: shipment?.id ?? null,
+      shippingCost: shipment?.shippingCost ?? Math.max(current?.shippingCost ?? 0, journey.shippingCost),
+      shippingVendor: shipment?.shippingVendor || current?.shippingVendor || journey.shippingVendor,
+      sphDocuments: nextDocuments.sort((a, b) => a.sphNo.localeCompare(b.sphNo)),
+      ttbNo: shipment?.shipmentNo || `TTB-${document.sphNo}`,
+      totalQty: (current?.totalQty ?? 0) + journey.quantity,
+    });
   }
 
-  const filteredDocuments = documents.filter((document) => {
-    const sphStatus = normalizedSphStatus(document.status);
-    const totalQty = itemQtyBySph.get(document.id) ?? 0;
-    const receivedQty = receivedQtyBySph.get(document.id) ?? 0;
-    const latestStatus = latestStatusBySph.get(document.id) || "";
-    const isPending =
-      sphStatus !== "selesai" &&
-      (totalQty === 0 || receivedQty < totalQty || !isShipmentFinal(latestStatus));
+  const shipmentGroups = Array.from(shipmentGroupsByKey.values()).filter((group) => {
+    const isDone =
+      group.totalQty > 0 &&
+      group.receivedQty >= group.totalQty &&
+      isShipmentFinal(group.latestStatus);
     const matchesQuery =
       !query ||
       [
-        document.sphNo,
-        document.customerName,
-        document.customerCode,
-        document.franco,
-        latestStatus,
+        group.customerName,
+        group.customerCode,
+        group.destination,
+        group.shippingVendor,
+        group.latestStatus,
+        group.ttbNo,
+        ...group.sphDocuments.map((document) => document.sphNo),
       ].some((value) => textMatches(value, query));
     const matchesStatus =
       !statusFilter ||
-      (statusFilter === "pending" ? isPending : !isPending);
+      (statusFilter === "pending" ? !isDone : isDone);
 
-    return (
-      !["cek_harga", "cancel"].includes(sphStatus) &&
-      matchesQuery &&
-      matchesStatus
-    );
+    return matchesQuery && matchesStatus;
   });
-  const { pageRows, safePage } = paginateRows(
-    filteredDocuments,
-    getCurrentPage(params)
-  );
+  const shipmentRows = shipmentGroups.sort((a, b) => {
+      const dateCompare = String(b.deliveryDate ?? "").localeCompare(
+        String(a.deliveryDate ?? "")
+      );
+
+      return dateCompare || groupTitle(a).localeCompare(groupTitle(b));
+    });
+  const { pageRows, safePage } = paginateRows(shipmentRows, getCurrentPage(params));
 
   return (
     <AppShell>
       <section className="sph-list-page">
         <div className="dashboard-header">
           <div>
-            <p className="page-kicker">Journey Pengiriman</p>
-            <h1>Pengiriman per SPH</h1>
+            <p className="page-kicker">Operasional Pengiriman</p>
+            <h1>Pengiriman</h1>
+            <p className="form-subtitle">
+              Batch dengan customer, tanggal, vendor, dan tujuan yang sama ditampilkan
+              sebagai satu pengiriman gabungan.
+            </p>
           </div>
+          <Link className="primary-button" href="/pengiriman/create">
+            Tambah Pengiriman
+          </Link>
         </div>
 
         <form className="table-filter-bar">
@@ -203,7 +380,7 @@ export default async function PengirimanPage({
             <span>Search</span>
             <input
               name="q"
-              placeholder="No SPH, customer, tujuan, status"
+              placeholder="No TTB, SPH, customer, vendor, tujuan, status"
               defaultValue={getSearchParam(params, "q")}
             />
           </label>
@@ -225,50 +402,125 @@ export default async function PengirimanPage({
           <table className="customer-table shipment-list-table">
             <thead>
               <tr>
-                <th>No. SPH</th>
+                <th>No TTB</th>
                 <th>Customer</th>
-                <th>Tujuan SPH</th>
+                <th>Tujuan</th>
                 <th>Jadwal</th>
-                <th>Item Journey</th>
+                <th>Item / Qty</th>
+                <th>Vendor</th>
+                <th>Ongkir</th>
+                <th>Payment</th>
+                <th>Bukti Bayar</th>
                 <th>Status Terakhir</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length > 0 ? (
-                pageRows.map((document) => {
-                  const totalQty = itemQtyBySph.get(document.id) ?? 0;
-                  const receivedQty = receivedQtyBySph.get(document.id) ?? 0;
-
+                pageRows.map((shipment) => {
                   return (
-                    <tr key={document.id}>
-                      <td>
-                        <strong className="table-primary">{document.sphNo}</strong>
-                      </td>
+                    <tr key={shipment.key}>
                       <td>
                         <div className="stacked-cell">
-                          <strong>{document.customerName}</strong>
-                          <span>{document.customerCode}</span>
-                        </div>
-                      </td>
-                      <td>{document.franco || "-"}</td>
-                      <td>
-                        <div className="stacked-cell">
-                          <strong>{formatDate(document.deliveryDate)}</strong>
-                          <span>ETA {formatDate(document.etaDate)}</span>
+                          <strong className="table-primary">{shipment.ttbNo}</strong>
+                          <span>
+                            Ref SPH{" "}
+                            {shipment.sphDocuments
+                              .map((document) => document.sphNo)
+                              .join(", ")}
+                          </span>
                         </div>
                       </td>
                       <td>
-                        <span className="journey-progress">
-                          {receivedQty}/{totalQty} qty
-                        </span>
+                        <div className="stacked-cell">
+                          <strong>{shipment.customerName}</strong>
+                          <span>{shipment.customerCode}</span>
+                        </div>
                       </td>
-                      <td>{latestStatusBySph.get(document.id) || "-"}</td>
+                      <td>{shipment.destination || "-"}</td>
                       <td>
-                        <div className="table-actions">
-                          <Link href={`/pengiriman/${document.id}`}>
-                            Detail Journey
-                          </Link>
+                        <div className="stacked-cell">
+                          <strong>{formatDate(shipment.deliveryDate)}</strong>
+                          <span>ETA {formatDate(shipment.etaDate)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="stacked-cell">
+                          <strong>{shipment.itemCount} item</strong>
+                          <span className="journey-progress">
+                            {shipment.receivedQty}/{shipment.totalQty} qty
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{shipment.shippingVendor || "-"}</strong>
+                      </td>
+                      <td>
+                        <div className="stacked-cell">
+                          <ShipmentMoneyControl
+                            amount={shipment.shippingCost}
+                            field="shippingCost"
+                            label="Ongkir"
+                            shipmentId={shipment.shipmentId}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <div className="stacked-cell">
+                          <strong>
+                            {shipment.paidAmount <= 0
+                              ? "Belum Bayar"
+                              : shipment.paidAmount >= shipment.shippingCost &&
+                                  shipment.shippingCost > 0
+                                ? "Sudah Bayar"
+                                : "DP"}
+                          </strong>
+                          <ShipmentMoneyControl
+                            amount={shipment.paidAmount}
+                            disabled={shipment.shippingCost <= 0}
+                            field="paidAmount"
+                            label="Terbayar"
+                            shipmentId={shipment.shipmentId}
+                          />
+                          <span>
+                            Sisa{" "}
+                            {new Intl.NumberFormat("id-ID", {
+                              currency: "IDR",
+                              maximumFractionDigits: 0,
+                              style: "currency",
+                            }).format(Math.max(shipment.shippingCost - shipment.paidAmount, 0))}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <ShipmentProofUpload
+                          paymentProofCount={shipment.paymentProofCount}
+                          shipmentId={shipment.shipmentId}
+                        />
+                      </td>
+                      <td>{shipment.latestStatus || "-"}</td>
+                      <td>
+                        <div className="table-actions icon-actions">
+                          {shipment.shipmentId ? (
+                            <>
+                              <a
+                                aria-label={`Download ${shipment.ttbNo}`}
+                                className="icon-action"
+                                href={`/pengiriman/ttb/${shipment.shipmentId}/download`}
+                                title={`Download ${shipment.ttbNo}`}
+                              >
+                                <DownloadIcon />
+                              </a>
+                              <Link
+                                aria-label={`Edit ${shipment.ttbNo}`}
+                                className="icon-action"
+                                href={`/pengiriman/${shipment.sphDocuments[0]?.id ?? ""}`}
+                                title={`Edit ${shipment.ttbNo}`}
+                              >
+                                <EditIcon />
+                              </Link>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -276,7 +528,7 @@ export default async function PengirimanPage({
                 })
               ) : (
                 <tr>
-                  <td colSpan={7}>Belum ada SPH untuk pengiriman sesuai filter.</td>
+                  <td colSpan={11}>Belum ada pengiriman sesuai filter.</td>
                 </tr>
               )}
             </tbody>
@@ -285,7 +537,7 @@ export default async function PengirimanPage({
         <Pagination
           currentPage={safePage}
           params={params}
-          totalItems={filteredDocuments.length}
+          totalItems={shipmentRows.length}
         />
       </section>
     </AppShell>

@@ -1,45 +1,18 @@
-import { eq, inArray } from "drizzle-orm";
-import { getDb } from "../../../../db";
+import { eq } from "drizzle-orm";
+import { getDb } from "../../../../../db";
 import {
   shipmentJourneys,
   shipments,
   sphDocuments,
   sphItems,
   suppliers,
-} from "../../../../db/schema";
-import { LOGO_JPEG_BASE64, SIGNATURE_JPEG_BASE64 } from "../../../sph/download/[id]/assets";
+} from "../../../../../db/schema";
+import { LOGO_JPEG_BASE64, SIGNATURE_JPEG_BASE64 } from "../../../../sph/download/[id]/assets";
 
-type SphDocument = {
-  sphNo: string;
-  ttbNo?: string;
-  sphDate: string;
+type TtbDocument = {
   customerName: string;
-  customerDetailLine1: string;
-  customerDetailLine2: string;
-  customerDetailLine3: string;
-  franco: string;
-  deliveryDate: string | null;
-};
-
-type SphItem = {
-  id: string;
-  lineNo: number;
-  partNumber: string;
-  partName: string;
-  quantity: number;
-  uom: string;
-};
-
-type JourneyRow = {
-  shipmentId: string | null;
-  sphItemId: string;
-  splitNo: number;
-  quantity: number;
-  origin: string;
-  destination: string;
-  latestStatus: string;
-  shippingVendor: string;
-  supplierName: string | null;
+  refSphNos: string;
+  ttbNo: string;
 };
 
 type TtbItem = {
@@ -109,10 +82,6 @@ function centerText(x1: number, x2: number, y: number, value: unknown, size = 9,
   return text((x1 + x2 - estimatedWidth) / 2, y, display, size, font);
 }
 
-function ttbNoFromSph(sphNo: string) {
-  return sphNo.startsWith("SPH") ? `TTB${sphNo.slice(3)}` : `TTB-${sphNo}`;
-}
-
 function splitText(value: string, maxChars: number) {
   const words = value.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -140,52 +109,7 @@ function checkBox(x: number, y: number) {
   return rect(x, y, 9, 9);
 }
 
-function buildTtbItems(items: SphItem[], journeys: JourneyRow[]) {
-  const journeysByItem: Record<string, JourneyRow[]> = {};
-
-  for (const journey of journeys) {
-    journeysByItem[journey.sphItemId] = [
-      ...(journeysByItem[journey.sphItemId] ?? []),
-      journey,
-    ];
-  }
-
-  const rows: TtbItem[] = [];
-
-  for (const item of items) {
-    const itemJourneys = (journeysByItem[item.id] ?? []).sort(
-      (a, b) => a.splitNo - b.splitNo
-    );
-
-    if (itemJourneys.length === 0) {
-      rows.push({
-        lineNo: String(item.lineNo),
-        note: "",
-        partName: item.partName,
-        partNumber: item.partNumber,
-        quantity: item.quantity,
-        uom: item.uom,
-      });
-      continue;
-    }
-
-    for (const journey of itemJourneys) {
-      rows.push({
-        lineNo: itemJourneys.length > 1 ? `${item.lineNo}.${journey.splitNo}` : String(item.lineNo),
-        note: "",
-        partName: item.partName,
-        partNumber: item.partNumber,
-        quantity: journey.quantity || item.quantity,
-        uom: item.uom,
-      });
-    }
-  }
-
-  return rows;
-}
-
-function buildContent(document: SphDocument, items: TtbItem[]) {
-  const ttbNo = document.ttbNo || ttbNoFromSph(document.sphNo);
+function buildContent(document: TtbDocument, items: TtbItem[]) {
   const addressLines = [
     "Jl. Trans Sulawesi",
     "Kavling Bintang Putri Blok D No 4",
@@ -195,6 +119,10 @@ function buildContent(document: SphDocument, items: TtbItem[]) {
   const handoverText =
     "Pada hari ini Tanggal ____________________ telah diserahkan sejumlah barang " +
     "dengan informasi detail sebagai berikut :";
+  const refSphLines = document.refSphNos
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   let content = "1 w\n";
   content += image("ImLogo", left, 772, 52, 52);
@@ -206,13 +134,19 @@ function buildContent(document: SphDocument, items: TtbItem[]) {
   });
 
   content += text(382, 728, "No TTB", 10, "F2");
-  content += text(452, 728, ttbNo, 10);
+  content += text(452, 728, document.ttbNo, 10);
   content += text(382, 708, "No PO", 10, "F2");
   content += text(452, 708, "-", 10);
   content += text(382, 688, "Tanggal", 10, "F2");
   content += text(452, 688, "_________", 10);
   content += text(382, 668, "Ref SPH", 10, "F2");
-  content += text(452, 668, document.sphNo, 10);
+  if (refSphLines.length > 0) {
+    refSphLines.slice(0, 3).forEach((sphNo, index) => {
+      content += text(452, 668 - index * 14, sphNo, 8);
+    });
+  } else {
+    content += text(452, 668, "-", 8);
+  }
 
   content += text(left, 612, handoverText, 10);
 
@@ -301,7 +235,7 @@ function imageObject(asset: ReturnType<typeof loadJpegAsset>) {
   };
 }
 
-function createPdf(document: SphDocument, items: TtbItem[]) {
+function createPdf(document: TtbDocument, items: TtbItem[]) {
   const content = buildContent(document, items);
   const logo = loadJpegAsset(LOGO_JPEG_BASE64, 1080, 1080);
   const signatureQr = loadJpegAsset(SIGNATURE_JPEG_BASE64, 1105, 1105);
@@ -374,82 +308,76 @@ export async function GET(
   const { id } = await params;
 
   if (!id) {
-    return new Response("SPH tidak valid.", { status: 400 });
+    return new Response("Pengiriman tidak valid.", { status: 400 });
   }
 
   const db = await getDb();
-  const [document] = await db
+  const [shipment] = await db
     .select({
-      sphNo: sphDocuments.sphNo,
-      sphDate: sphDocuments.sphDate,
-      customerName: sphDocuments.customerName,
-      customerDetailLine1: sphDocuments.customerDetailLine1,
-      customerDetailLine2: sphDocuments.customerDetailLine2,
-      customerDetailLine3: sphDocuments.customerDetailLine3,
-      franco: sphDocuments.franco,
-      deliveryDate: sphDocuments.deliveryDate,
+      customerName: shipments.customerName,
+      shipmentNo: shipments.shipmentNo,
     })
-    .from(sphDocuments)
-    .where(eq(sphDocuments.id, id))
+    .from(shipments)
+    .where(eq(shipments.id, id))
     .limit(1);
 
-  if (!document) {
-    return new Response("SPH tidak ditemukan.", { status: 404 });
+  if (!shipment) {
+    return new Response("Pengiriman tidak ditemukan.", { status: 404 });
   }
 
-  const items = await db
+  const rows = await db
     .select({
-      id: sphItems.id,
+      destination: shipmentJourneys.destination,
+      latestStatus: shipmentJourneys.latestStatus,
       lineNo: sphItems.lineNo,
-      partNumber: sphItems.partNumber,
+      origin: shipmentJourneys.origin,
       partName: sphItems.partName,
-      quantity: sphItems.quantity,
+      partNumber: sphItems.partNumber,
+      quantity: shipmentJourneys.quantity,
+      sphNo: sphDocuments.sphNo,
+      splitNo: shipmentJourneys.splitNo,
+      supplierName: suppliers.name,
       uom: sphItems.uom,
     })
-    .from(sphItems)
-    .where(eq(sphItems.sphId, id));
-  items.sort((a, b) => a.lineNo - b.lineNo);
+    .from(shipmentJourneys)
+    .innerJoin(sphItems, eq(shipmentJourneys.sphItemId, sphItems.id))
+    .innerJoin(sphDocuments, eq(sphItems.sphId, sphDocuments.id))
+    .leftJoin(suppliers, eq(shipmentJourneys.supplierId, suppliers.id))
+    .where(eq(shipmentJourneys.shipmentId, id));
+  const refSphNos = [...new Set(rows.map((row) => row.sphNo))].join(", ");
+  const items = rows
+    .sort(
+      (a, b) =>
+        a.sphNo.localeCompare(b.sphNo) ||
+        a.lineNo - b.lineNo ||
+        a.splitNo - b.splitNo
+    )
+    .map((row, index) => {
+      return {
+        lineNo: String(index + 1),
+        note: "",
+        partName: row.partName,
+        partNumber: row.partNumber,
+        quantity: row.quantity,
+        uom: row.uom,
+      };
+    });
+  const ttbNo = shipment.shipmentNo;
 
-  const itemIds = items.map((item) => item.id);
-  const journeys: JourneyRow[] =
-    itemIds.length > 0
-      ? await db
-          .select({
-            sphItemId: shipmentJourneys.sphItemId,
-            shipmentId: shipmentJourneys.shipmentId,
-            splitNo: shipmentJourneys.splitNo,
-            quantity: shipmentJourneys.quantity,
-            origin: shipmentJourneys.origin,
-            destination: shipmentJourneys.destination,
-            latestStatus: shipmentJourneys.latestStatus,
-            shippingVendor: shipmentJourneys.shippingVendor,
-            supplierName: suppliers.name,
-          })
-          .from(shipmentJourneys)
-          .leftJoin(suppliers, eq(shipmentJourneys.supplierId, suppliers.id))
-          .where(inArray(shipmentJourneys.sphItemId, itemIds))
-      : [];
-  const shipmentIds = [
-    ...new Set(
-      journeys
-        .map((journey) => journey.shipmentId)
-        .filter((shipmentId): shipmentId is string => Boolean(shipmentId))
+  return new Response(
+    createPdf(
+      {
+        customerName: shipment.customerName,
+        refSphNos,
+        ttbNo,
+      },
+      items
     ),
-  ];
-  const [shipment] =
-    shipmentIds.length > 0
-      ? await db
-          .select({ shipmentNo: shipments.shipmentNo })
-          .from(shipments)
-          .where(inArray(shipments.id, shipmentIds))
-          .limit(1)
-      : [];
-  const ttbNo = shipment?.shipmentNo || ttbNoFromSph(document.sphNo);
-
-  return new Response(createPdf({ ...document, ttbNo }, buildTtbItems(items, journeys)), {
-    headers: {
-      "Content-Disposition": `attachment; filename="${ttbNo}.pdf"`,
-      "Content-Type": "application/pdf",
-    },
-  });
+    {
+      headers: {
+        "Content-Disposition": `attachment; filename="${ttbNo}.pdf"`,
+        "Content-Type": "application/pdf",
+      },
+    }
+  );
 }

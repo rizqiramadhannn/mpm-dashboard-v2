@@ -1080,6 +1080,54 @@ a {
   min-width: 1080px;
 }
 
+.shipment-create-table {
+  min-width: 1180px;
+}
+
+.shipment-create-table input[type="number"],
+.shipment-create-table select {
+  min-width: 0;
+}
+
+.shipment-create-table input[type="number"] {
+  max-width: 120px;
+}
+
+.shipment-create-table select {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  min-height: 36px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.shipment-row-meta {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+  margin-top: 6px;
+}
+
+.shipment-money-form,
+.shipment-proof-upload,
+.shipment-action-pair {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.shipment-proof-upload {
+  flex-wrap: wrap;
+}
+
+.shipment-action-pair {
+  margin-right: 6px;
+}
+
 .table-primary {
   color: var(--foreground);
   font-weight: 800;
@@ -1821,6 +1869,22 @@ a {
   background: #ffffff;
   border: 1px solid var(--line);
   color: #344054;
+}
+
+.shipment-create-checkbox {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex-direction: row !important;
+  gap: 10px;
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
+.shipment-create-checkbox input {
+  min-height: 16px;
+  width: 16px;
 }
 
 .primary-button:disabled,

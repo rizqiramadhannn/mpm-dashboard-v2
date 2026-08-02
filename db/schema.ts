@@ -106,10 +106,54 @@ export const sphItems = sqliteTable(
   })
 );
 
+export const shipments = sqliteTable(
+  "shipments",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    shipmentNo: text("shipment_no").notNull(),
+    shipmentDate: text("shipment_date").notNull(),
+    customerCode: text("customer_code").notNull().default(""),
+    customerName: text("customer_name").notNull().default(""),
+    destination: text("destination").notNull().default(""),
+    shippingVendor: text("shipping_vendor").notNull().default(""),
+    shippingCost: integer("shipping_cost").notNull().default(0),
+    isShippingPaid: integer("is_shipping_paid", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    paidAmount: integer("paid_amount").notNull().default(0),
+    paymentProofFilesJson: text("payment_proof_files_json", {
+      mode: "json",
+    })
+      .$type<
+        {
+          base64: string;
+          mimeType: string;
+          name: string;
+          sha256: string;
+          size: number;
+        }[]
+      >()
+      .notNull()
+      .default(sql`'[]'`),
+    latestStatus: text("latest_status").notNull().default("TERJADWAL"),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    shipmentNoIdx: uniqueIndex("shipments_shipment_no_idx").on(table.shipmentNo),
+    customerIdx: index("shipments_customer_idx").on(table.customerCode),
+    dateIdx: index("shipments_date_idx").on(table.shipmentDate),
+  })
+);
+
 export const shipmentJourneys = sqliteTable(
   "shipment_journeys",
   {
     id: text("id").primaryKey().$defaultFn(randomId),
+    shipmentId: text("shipment_id").references(() => shipments.id, {
+      onDelete: "set null",
+    }),
     sphItemId: text("sph_item_id")
       .notNull()
       .references(() => sphItems.id, { onDelete: "cascade" }),
@@ -140,6 +184,7 @@ export const shipmentJourneys = sqliteTable(
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => ({
+    shipmentIdx: index("shipment_journeys_shipment_idx").on(table.shipmentId),
     sphItemIdx: index("shipment_journeys_sph_item_idx").on(table.sphItemId),
     sphItemSplitIdx: uniqueIndex("shipment_journeys_sph_item_split_idx").on(
       table.sphItemId,
@@ -589,6 +634,10 @@ export const sphItemsRelations = relations(sphItems, ({ one, many }) => ({
 }));
 
 export const shipmentJourneysRelations = relations(shipmentJourneys, ({ one }) => ({
+  shipment: one(shipments, {
+    fields: [shipmentJourneys.shipmentId],
+    references: [shipments.id],
+  }),
   sphItem: one(sphItems, {
     fields: [shipmentJourneys.sphItemId],
     references: [sphItems.id],
@@ -597,6 +646,10 @@ export const shipmentJourneysRelations = relations(shipmentJourneys, ({ one }) =
     fields: [shipmentJourneys.supplierId],
     references: [suppliers.id],
   }),
+}));
+
+export const shipmentsRelations = relations(shipments, ({ many }) => ({
+  journeys: many(shipmentJourneys),
 }));
 
 export const ttbDocumentsRelations = relations(ttbDocuments, ({ one, many }) => ({

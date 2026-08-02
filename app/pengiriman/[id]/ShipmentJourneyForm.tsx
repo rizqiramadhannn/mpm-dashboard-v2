@@ -380,16 +380,13 @@ export function ShipmentJourneyForm({
             <p className="page-kicker">Journey Pengiriman</p>
             <h1>{sphNo}</h1>
             <p>
-              {customerName} ({customerCode}) - Tujuan SPH: {destinationFallback || "-"}
+              {customerName} ({customerCode}) - Tujuan: {destinationFallback || "-"}
             </p>
           </div>
           <div className="shipment-heading-actions">
             <Link className="secondary-button" href="/pengiriman">
               Kembali
             </Link>
-            <a className="secondary-button" href={`/pengiriman/${sphId}/download-ttb`}>
-              Download TTB
-            </a>
             <button className="primary-button" type="submit">
               Simpan Journey
             </button>
@@ -401,7 +398,9 @@ export function ShipmentJourneyForm({
         <div className="shipment-batch-header">
           <div>
             <span>Batch Pengiriman</span>
-            <strong>Ongkir diisi satu kali per batch</strong>
+            <strong>
+              Pakai vendor, tujuan, dan jadwal yang sama untuk menggabungkan beberapa SPH
+            </strong>
           </div>
           <button className="secondary-button" onClick={addBatch} type="button">
             Tambah Batch
