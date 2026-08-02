@@ -139,6 +139,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             PAYMENT REQUEST
           </Link>
 
+          <Link
+            className={`nav-link ${isActive(pathname, "/workspace") ? "active" : ""}`}
+            href="/workspace"
+          >
+            WORKSPACE
+          </Link>
+
           <a
             className="nav-link"
             href={inventoryUrl}

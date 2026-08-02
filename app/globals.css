@@ -1560,6 +1560,56 @@ a {
   padding: 14px;
 }
 
+.workspace-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.workspace-card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workspace-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  justify-content: space-between;
+  min-height: 220px;
+  padding: 20px;
+}
+
+.workspace-card span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.workspace-card h2 {
+  color: var(--foreground);
+  font-size: 22px;
+  line-height: 1.15;
+  margin: 10px 0 0;
+}
+
+.workspace-card p {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 10px 0 0;
+}
+
+.workspace-card-action {
+  text-align: center;
+}
+
 .primary-button,
 .secondary-button,
 .icon-button {
@@ -2071,6 +2121,7 @@ a {
   .form-grid,
   .customer-preview,
   .payment-request-form,
+  .workspace-card-grid,
   .shipment-grid,
   .shipment-grid.split-grid,
   .shipment-grid.batch-grid,
