@@ -152,15 +152,170 @@ function splitText(value: string, maxChars: number) {
   return lines.length > 0 ? lines : [""];
 }
 
+function estimatedTextWidth(value: unknown, size = 9) {
+  return Array.from(pdfString(value)).reduce((width, char) => {
+    if (char === " ") {
+      return width + size * 0.28;
+    }
+
+    if ("MW".includes(char)) {
+      return width + size * 0.88;
+    }
+
+    if ("ABCDEFGHKNOPQRSTUVWXYZ".includes(char)) {
+      return width + size * 0.68;
+    }
+
+    if ("0123456789".includes(char)) {
+      return width + size * 0.56;
+    }
+
+    if ("ijlI.,:/-".includes(char)) {
+      return width + size * 0.32;
+    }
+
+    return width + size * 0.52;
+  }, 0);
+}
+
+function splitLongText(value: string, maxWidth: number, size = 9) {
+  const lines: string[] = [];
+  let current = "";
+
+  for (const char of value) {
+    const next = `${current}${char}`;
+
+    if (current && estimatedTextWidth(next, size) > maxWidth) {
+      lines.push(current);
+      current = char;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines.length > 0 ? lines : [""];
+}
+
+function fitText(value: string, maxWidth: number, size = 9) {
+  if (estimatedTextWidth(value, size) <= maxWidth) {
+    return value;
+  }
+
+  const suffix = "...";
+  let fitted = value;
+
+  while (
+    fitted.length > 0 &&
+    estimatedTextWidth(`${fitted}${suffix}`, size) > maxWidth
+  ) {
+    fitted = fitted.slice(0, -1);
+  }
+
+  return fitted ? `${fitted}${suffix}` : "";
+}
+
+function partNumberTokens(value: string) {
+  const parts = value.split(/(\s+|\/)/).filter(Boolean);
+  const tokens: string[] = [];
+  let current = "";
+
+  for (const part of parts) {
+    if (/^\s+$/.test(part)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+    } else if (part === "/") {
+      current = `${current}/`;
+      tokens.push(current);
+      current = "";
+    } else {
+      current = `${current}${part}`;
+    }
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens.length > 0 ? tokens : [""];
+}
+
+function wrapText(
+  value: unknown,
+  maxWidth: number,
+  size = 9,
+  options: { maxLines?: number; slashBreaks?: boolean } = {}
+) {
+  const display = pdfString(value);
+  const words = options.slashBreaks ? partNumberTokens(display) : display.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words.length > 0 ? words : [""]) {
+    if (estimatedTextWidth(word, size) > maxWidth) {
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+
+      const splitLines = splitLongText(word, maxWidth, size);
+      lines.push(...splitLines.slice(0, -1));
+      current = splitLines.at(-1) ?? "";
+
+      continue;
+    }
+
+    const separator = options.slashBreaks && current.endsWith("/") ? "" : " ";
+    const next = current ? `${current}${separator}${word}` : word;
+
+    if (current && estimatedTextWidth(next, size) > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  const normalizedLines = lines.length > 0 ? lines : [""];
+
+  if (options.maxLines && normalizedLines.length > options.maxLines) {
+    return [
+      ...normalizedLines.slice(0, options.maxLines - 1),
+      fitText(normalizedLines.slice(options.maxLines - 1).join(" "), maxWidth, size),
+    ];
+  }
+
+  return normalizedLines;
+}
+
+function multilineText(
+  x: number,
+  y: number,
+  lines: string[],
+  size = 9,
+  font = "F1",
+  lineHeight = 11
+) {
+  return lines.map((lineValue, index) => text(x, y - index * lineHeight, lineValue, size, font)).join("");
+}
+
 function rightText(x: number, y: number, value: unknown, size = 9) {
   const display = pdfString(value);
-  const estimatedWidth = display.length * size * 0.5;
-  return text(x - estimatedWidth, y, display, size);
+  return text(x - estimatedTextWidth(display, size), y, display, size);
 }
 
 function centerText(x1: number, x2: number, y: number, value: unknown, size = 9, font = "F1") {
   const display = pdfString(value);
-  const estimatedWidth = display.length * size * 0.5;
+  const estimatedWidth = estimatedTextWidth(display, size);
   return text((x1 + x2 - estimatedWidth) / 2, y, display, size, font);
 }
 
@@ -194,20 +349,28 @@ function buildContent(document: SphDocument, items: SphItem[]) {
   content += text(left, 620, "Kepada Yth : ", 10, "F2");
   content += text(365, 620, "Pembayaran", 9, "F2");
   content += text(438, 620, document.paymentTerm, 9);
-  content += text(left, 598, document.customerName, 10);
+  let customerY = 598;
+  for (const customerLine of [
+    { value: document.customerName, size: 10 },
+    { value: document.customerDetailLine1, size: 9 },
+    { value: document.customerDetailLine2, size: 9 },
+    { value: document.customerDetailLine3, size: 9 },
+  ]) {
+    const lines = wrapText(customerLine.value, 310, customerLine.size, { maxLines: 2 });
+    content += multilineText(left, customerY, lines, customerLine.size);
+    customerY -= lines.length * 12 + 4;
+  }
   content += text(365, 598, "Franco ", 9, "F2");
   content += text(438, 598, document.franco || "-", 9);
-  content += text(left, 582, document.customerDetailLine1, 9);
   content += text(365, 582, "Pengiriman", 9, "F2");
   content += text(438, 582, formatDate(document.deliveryDate), 9);
-  content += text(left, 566, document.customerDetailLine2, 9);
   content += text(365, 566, "ETA", 9, "F2");
   content += text(438, 566, formatDate(document.etaDate), 9);
-  content += text(left, 550, document.customerDetailLine3, 9);
 
   const tableTop = 494;
   const headerHeight = 22;
   const rowHeight = 19;
+  const rowLineHeight = 11;
   const cols = [colA, colB, colC, colD, colE, colF, colG];
 
   content += "0 0 0 rg\n";
@@ -232,16 +395,23 @@ function buildContent(document: SphDocument, items: SphItem[]) {
     const item = items[index];
 
     if (item) {
-      const itemName = splitText(item.partName, 30)[0];
+      const partNumberSize = 9;
+      const partNumberLines = wrapText(item.partNumber, colC - colB - 12, partNumberSize, {
+        slashBreaks: true,
+      });
+      const partNameLines = wrapText(item.partName, colD - colC - 12, 10, { maxLines: 3 });
+      const itemLineCount = Math.max(partNumberLines.length, partNameLines.length);
+      const itemRowHeight = Math.max(rowHeight, itemLineCount * rowLineHeight + 8);
       content += centerText(colA, colB, y - 13, item.lineNo, 10);
-      content += text(colB + 6, y - 13, item.partNumber, 10);
-      content += text(colC + 6, y - 13, itemName, 10);
+      content += multilineText(colB + 6, y - 13, partNumberLines, partNumberSize, "F1", rowLineHeight);
+      content += multilineText(colC + 6, y - 13, partNameLines, 10, "F1", rowLineHeight);
       content += centerText(colD, colE, y - 13, item.quantity, 10);
       content += rightText(colF - 8, y - 13, formatSheetRupiah(item.unitPrice), 10);
       content += rightText(colG - 8, y - 13, formatSheetRupiah(item.totalPrice), 10);
+      y -= itemRowHeight;
+    } else {
+      y -= rowHeight;
     }
-
-    y -= rowHeight;
   }
 
   content += line(left, y, right, y);
