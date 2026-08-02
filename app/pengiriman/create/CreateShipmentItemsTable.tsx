@@ -31,6 +31,23 @@ export function CreateShipmentItemsTable({
   suppliers,
 }: CreateShipmentItemsTableProps) {
   const [rows, setRows] = useState<ShipmentRow[]>([createRow(1)]);
+  const [selectedCustomerCode, setSelectedCustomerCode] = useState("");
+  const customerOptions = useMemo(() => {
+    const options = new Map<string, { customerCode: string; customerName: string }>();
+
+    for (const item of availableItems) {
+      options.set(item.customerCode, {
+        customerCode: item.customerCode,
+        customerName: item.customerName,
+      });
+    }
+
+    return Array.from(options.values()).sort(
+      (a, b) =>
+        a.customerName.localeCompare(b.customerName) ||
+        a.customerCode.localeCompare(b.customerCode)
+    );
+  }, [availableItems]);
   const sphOptions = useMemo(() => {
     const options = new Map<
       string,
@@ -48,10 +65,14 @@ export function CreateShipmentItemsTable({
 
     return Array.from(options.values()).sort((a, b) => a.sphNo.localeCompare(b.sphNo));
   }, [availableItems]);
+  const filteredSphOptions = selectedCustomerCode
+    ? sphOptions.filter((sph) => sph.customerCode === selectedCustomerCode)
+    : sphOptions;
   const itemById = useMemo(
     () => new Map(availableItems.map((item) => [item.itemId, item])),
     [availableItems]
   );
+  const sphById = useMemo(() => new Map(sphOptions.map((sph) => [sph.sphId, sph])), [sphOptions]);
   const selectedItemIds = new Set(rows.map((row) => row.itemId).filter(Boolean));
 
   function updateRow(rowKey: string, patch: Partial<ShipmentRow>) {
@@ -70,6 +91,36 @@ export function CreateShipmentItemsTable({
     setRows((current) => [...current, createRow(current.length + 1)]);
   }
 
+  function changeCustomer(customerCode: string) {
+    setSelectedCustomerCode(customerCode);
+    setRows((current) =>
+      current.map((row) => {
+        const selectedSph = row.sphId ? sphById.get(row.sphId) : null;
+
+        if (!customerCode || !selectedSph || selectedSph.customerCode === customerCode) {
+          return row;
+        }
+
+        return { ...row, itemId: "", quantity: "", sphId: "", supply: "stock" };
+      })
+    );
+  }
+
+  function changeSph(rowKey: string, sphId: string) {
+    const selectedSph = sphId ? sphById.get(sphId) : null;
+
+    if (!selectedCustomerCode && selectedSph) {
+      setSelectedCustomerCode(selectedSph.customerCode);
+    }
+
+    updateRow(rowKey, {
+      itemId: "",
+      quantity: "",
+      sphId,
+      supply: "stock",
+    });
+  }
+
   return (
     <section className="form-section">
       <div className="section-heading compact">
@@ -80,6 +131,23 @@ export function CreateShipmentItemsTable({
         <button className="secondary-button" onClick={addRow} type="button">
           Tambah Baris
         </button>
+      </div>
+
+      <div className="form-grid">
+        <label className="full-width">
+          <span>Customer</span>
+          <select
+            onChange={(event) => changeCustomer(event.target.value)}
+            value={selectedCustomerCode}
+          >
+            <option value="">Semua customer</option>
+            {customerOptions.map((customer) => (
+              <option key={customer.customerCode} value={customer.customerCode}>
+                {customer.customerCode} - {customer.customerName}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="customer-table-wrap">
@@ -106,18 +174,11 @@ export function CreateShipmentItemsTable({
                     <td>{index + 1}</td>
                     <td>
                       <select
-                        onChange={(event) =>
-                          updateRow(row.rowKey, {
-                            itemId: "",
-                            quantity: "",
-                            sphId: event.target.value,
-                            supply: "stock",
-                          })
-                        }
+                        onChange={(event) => changeSph(row.rowKey, event.target.value)}
                         value={row.sphId}
                       >
                         <option value="">Pilih SPH</option>
-                        {sphOptions.map((sph) => (
+                        {filteredSphOptions.map((sph) => (
                           <option key={sph.sphId} value={sph.sphId}>
                             {sph.sphNo} - {sph.customerCode}
                           </option>
