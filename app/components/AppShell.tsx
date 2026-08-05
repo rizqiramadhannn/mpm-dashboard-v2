@@ -146,6 +146,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             WORKSPACE
           </Link>
 
+          <Link
+            className={`nav-link ${isActive(pathname, "/admin/users") ? "active" : ""}`}
+            href="/admin/users"
+          >
+            ADMIN USERS
+          </Link>
+
           <a
             className="nav-link"
             href={inventoryUrl}
@@ -170,6 +177,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </nav>
+
+        <form action="/logout" method="post">
+          <button className="logout-button" type="submit">
+            LOGOUT
+          </button>
+        </form>
       </aside>
 
       <main className="main-content">

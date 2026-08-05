@@ -608,6 +608,48 @@ export const assets = sqliteTable(
   })
 );
 
+export const appUsers = sqliteTable(
+  "app_users",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    username: text("username").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    role: text("role", {
+      enum: ["superadmin", "user"],
+    })
+      .notNull()
+      .default("user"),
+    mustChangePassword: integer("must_change_password", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    usernameIdx: uniqueIndex("app_users_username_idx").on(table.username),
+  })
+);
+
+export const appLoginAttempts = sqliteTable(
+  "app_login_attempts",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    username: text("username").notNull(),
+    ipAddress: text("ip_address").notNull(),
+    success: integer("success", { mode: "boolean" }).notNull().default(false),
+    attemptedAt: text("attempted_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    attemptedAtIdx: index("app_login_attempts_attempted_at_idx").on(
+      table.attemptedAt
+    ),
+    identityIdx: index("app_login_attempts_identity_idx").on(
+      table.username,
+      table.ipAddress
+    ),
+  })
+);
+
 export const customersRelations = relations(customers, ({ many }) => ({
   sphDocuments: many(sphDocuments),
 }));

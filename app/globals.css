@@ -153,6 +153,24 @@ a {
   padding-left: 14px;
 }
 
+.logout-button {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 9px 12px;
+  width: 100%;
+}
+
+.logout-button:hover {
+  background: #f8fafc;
+}
+
 .main-content {
   display: flex;
   flex-direction: column;
@@ -189,6 +207,146 @@ a {
   min-height: calc(100vh - 64px);
   padding: 48px;
   text-align: center;
+}
+
+.auth-page {
+  align-items: center;
+  background: var(--background);
+  display: flex;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.auth-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 auto;
+  padding: 28px;
+  width: min(100%, 420px);
+}
+
+.auth-brand {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.auth-brand img {
+  height: 64px;
+  object-fit: contain;
+  width: 64px;
+}
+
+.auth-brand p {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 850;
+  margin: 0;
+}
+
+.auth-brand span,
+.auth-copy {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.auth-title {
+  font-size: 28px;
+  line-height: 1.1;
+  margin: 8px 0 0;
+}
+
+.auth-copy {
+  margin: 8px 0 0;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form label,
+.admin-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-form span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.auth-form input,
+.admin-password-form input {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  min-height: 42px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
+.auth-form input:focus,
+.admin-password-form input:focus {
+  border-color: var(--accent);
+  outline: 3px solid #ccfbf1;
+}
+
+.auth-form button,
+.admin-password-form button {
+  background: var(--primary);
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  min-height: 42px;
+  padding: 9px 15px;
+}
+
+.auth-error,
+.auth-success {
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 750;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.auth-error {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.auth-error.inline,
+.auth-success {
+  width: fit-content;
+}
+
+.auth-success {
+  background: #e9f8f2;
+  color: #047857;
+}
+
+.admin-password-form {
+  align-items: center;
+  flex-direction: row;
+}
+
+.admin-password-form input {
+  min-width: 180px;
 }
 
 .page-kicker {

@@ -148,6 +148,20 @@
       "when": 1786204800000,
       "tag": "0024_rename_shipment_no_to_ttb",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1786291200000,
+      "tag": "0025_app_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1786377600000,
+      "tag": "0026_app_login_attempts",
+      "breakpoints": true
     }
   ]
 }
