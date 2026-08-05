@@ -564,6 +564,10 @@ export const paymentRequests = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(randomId),
     requestDate: text("request_date").notNull(),
+    requestedByUserId: text("requested_by_user_id").references(() => appUsers.id, {
+      onDelete: "set null",
+    }),
+    requestedByUsername: text("requested_by_username").notNull().default(""),
     sourceFund: text("source_fund").notNull().default(""),
     amount: integer("amount").notNull().default(0),
     destinationAccount: text("destination_account").notNull().default(""),
@@ -579,6 +583,9 @@ export const paymentRequests = sqliteTable(
     ),
     sourceFundIdx: index("payment_requests_source_fund_idx").on(table.sourceFund),
     statusIdx: index("payment_requests_status_idx").on(table.status),
+    requestedByIdx: index("payment_requests_requested_by_idx").on(
+      table.requestedByUsername
+    ),
   })
 );
 

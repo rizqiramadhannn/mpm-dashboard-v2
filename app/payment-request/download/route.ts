@@ -40,6 +40,7 @@ function buildWorkbookXml(
       emptyCell(),
       cell(index + 1, "Center", "Number"),
       cell(formatDate(item.requestDate), "DateText"),
+      cell(item.requestedByUsername || "-", "Center"),
       cell(item.sourceFund, "Center"),
       cell(item.amount, "Money", "Number"),
       cell(item.destinationAccount, "Text"),
@@ -117,6 +118,7 @@ function buildWorkbookXml(
       <Column ss:Width="24"/>
       <Column ss:Width="42"/>
       <Column ss:Width="86"/>
+      <Column ss:Width="110"/>
       <Column ss:Width="118"/>
       <Column ss:Width="100"/>
       <Column ss:Width="160"/>
@@ -129,6 +131,7 @@ function buildWorkbookXml(
         emptyCell(),
         cell("No", "Header"),
         cell("Tanggal", "Header"),
+        cell("Diajukan Oleh", "Header"),
         cell("Sumber Dana", "Header"),
         cell("Nominal", "Header"),
         cell("Rek Tujuan", "Header"),

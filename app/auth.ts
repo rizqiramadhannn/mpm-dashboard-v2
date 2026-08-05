@@ -263,6 +263,32 @@ export async function listAdminAuditLogs(limit = 50) {
     .limit(limit);
 }
 
+export async function recordAdminAuditLog({
+  action,
+  actor,
+  details,
+  targetUserId = "",
+  targetUsername = "",
+}: {
+  action: string;
+  actor: AuthUser;
+  details: Record<string, unknown>;
+  targetUserId?: string;
+  targetUsername?: string;
+}) {
+  const db = await getDb();
+  await db.insert(appAdminAuditLogs).values({
+    action,
+    actorUserId: actor.id,
+    actorUsername: actor.username,
+    detailsJson: details,
+    id: randomId(),
+    ipAddress: await getRequestIp(),
+    targetUserId: targetUserId || null,
+    targetUsername,
+  });
+}
+
 export async function signOut() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
@@ -426,32 +452,6 @@ async function clearFailedLogins(username: string, ipAddress: string) {
         eq(appLoginAttempts.success, false)
       )
     );
-}
-
-async function recordAdminAuditLog({
-  action,
-  actor,
-  details,
-  targetUserId,
-  targetUsername,
-}: {
-  action: string;
-  actor: AuthUser;
-  details: Record<string, unknown>;
-  targetUserId: string;
-  targetUsername: string;
-}) {
-  const db = await getDb();
-  await db.insert(appAdminAuditLogs).values({
-    action,
-    actorUserId: actor.id,
-    actorUsername: actor.username,
-    detailsJson: details,
-    id: randomId(),
-    ipAddress: await getRequestIp(),
-    targetUserId,
-    targetUsername,
-  });
 }
 
 async function getRequestIp() {

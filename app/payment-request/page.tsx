@@ -2,10 +2,12 @@ import Link from "next/link";
 import { AppShell } from "../components/AppShell";
 import { ConfirmForm } from "../components/ConfirmForm";
 import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
+import { requireUser } from "../auth";
 import {
   createPaymentRequestAction,
+  deletePaymentRequestAction,
   listPaymentRequests,
-  updatePaymentRequestStatusAction,
+  updatePaymentRequestAction,
 } from "./data";
 
 export const dynamic = "force-dynamic";
@@ -20,24 +22,6 @@ function getSearchParam(
 
 function textMatches(value: unknown, query: string) {
   return String(value ?? "").toLowerCase().includes(query);
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
 }
 
 function formatRupiah(value: number) {
@@ -64,7 +48,11 @@ export default async function PaymentRequestPage({
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const sourceFilter = getSearchParam(params, "source");
   const statusFilter = getSearchParam(params, "status");
-  const rows = await listPaymentRequests();
+  const [currentUser, rows] = await Promise.all([
+    requireUser("/payment-request"),
+    listPaymentRequests(),
+  ]);
+  const canDelete = currentUser.role === "superadmin";
   const sourceOptions = [...new Set(rows.map((row) => row.sourceFund))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
@@ -78,6 +66,7 @@ export default async function PaymentRequestPage({
         row.sourceFund,
         row.destinationAccount,
         row.description,
+        row.requestedByUsername,
         row.transactionPurpose,
         row.status,
       ].some((value) => textMatches(value, query));
@@ -180,48 +169,122 @@ export default async function PaymentRequestPage({
               <tr>
                 <th>No</th>
                 <th>Tanggal</th>
+                <th>Diajukan Oleh</th>
                 <th>Sumber Dana</th>
                 <th>Nominal</th>
                 <th>Rek Tujuan</th>
                 <th>Deskripsi</th>
                 <th>Tujuan Transaksi</th>
                 <th>Status</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length > 0 ? (
-                pageRows.map((row, index) => (
-                  <tr key={row.id}>
-                    <td>{index + 1}</td>
-                    <td>{formatDate(row.requestDate)}</td>
-                    <td>{row.sourceFund}</td>
-                    <td className="numeric-cell">{formatRupiah(row.amount)}</td>
-                    <td>{row.destinationAccount}</td>
-                    <td>{row.description}</td>
-                    <td>{row.transactionPurpose}</td>
-                    <td>
-                      <ConfirmForm
-                        action={updatePaymentRequestStatusAction}
-                        confirmMessage={`Simpan status payment request ${row.description}?`}
-                      >
-                        <input name="id" type="hidden" value={row.id} />
+                pageRows.map((row, index) => {
+                  const formId = `payment-request-${row.id}`;
+
+                  return (
+                    <tr key={row.id}>
+                      <td>{index + 1}</td>
+                      <td>
+                        <input
+                          className="inline-date-input"
+                          form={formId}
+                          name="requestDate"
+                          required
+                          type="date"
+                          defaultValue={row.requestDate}
+                        />
+                      </td>
+                      <td>{row.requestedByUsername || "-"}</td>
+                      <td>
+                        <input
+                          className="inline-text-input"
+                          form={formId}
+                          name="sourceFund"
+                          required
+                          defaultValue={row.sourceFund}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="inline-money-input"
+                          form={formId}
+                          inputMode="numeric"
+                          name="amount"
+                          required
+                          defaultValue={formatRupiah(row.amount)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="inline-text-input"
+                          form={formId}
+                          name="destinationAccount"
+                          required
+                          defaultValue={row.destinationAccount}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="inline-text-input wide"
+                          form={formId}
+                          name="description"
+                          required
+                          defaultValue={row.description}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="inline-text-input wide"
+                          form={formId}
+                          name="transactionPurpose"
+                          required
+                          defaultValue={row.transactionPurpose}
+                        />
+                      </td>
+                      <td>
                         <input
                           aria-label={`Status ${row.description}`}
                           className="inline-status-input"
+                          form={formId}
                           name="status"
                           placeholder="-"
                           defaultValue={row.status}
                         />
-                        <button className="inline-save-button" type="submit">
-                          Save
-                        </button>
-                      </ConfirmForm>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          <ConfirmForm
+                            action={updatePaymentRequestAction}
+                            confirmMessage={`Simpan perubahan payment request ${row.description}?`}
+                            id={formId}
+                          >
+                            <input name="id" type="hidden" value={row.id} />
+                            <button className="inline-save-button" type="submit">
+                              Save
+                            </button>
+                          </ConfirmForm>
+                          {canDelete ? (
+                            <ConfirmForm
+                              action={deletePaymentRequestAction}
+                              confirmMessage={`Hapus payment request ${row.description}?`}
+                            >
+                              <input name="id" type="hidden" value={row.id} />
+                              <button className="danger" type="submit">
+                                Delete
+                              </button>
+                            </ConfirmForm>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={8}>Belum ada payment request sesuai filter.</td>
+                  <td colSpan={10}>Belum ada payment request sesuai filter.</td>
                 </tr>
               )}
             </tbody>

@@ -2,6 +2,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
+import { recordAdminAuditLog, requireSuperadmin, requireUser } from "../auth";
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -48,6 +49,7 @@ export async function listPaymentRequests(order: "asc" | "desc" = "desc") {
       destinationAccount: paymentRequests.destinationAccount,
       id: paymentRequests.id,
       requestDate: paymentRequests.requestDate,
+      requestedByUsername: paymentRequests.requestedByUsername,
       sourceFund: paymentRequests.sourceFund,
       status: paymentRequests.status,
       transactionPurpose: paymentRequests.transactionPurpose,
@@ -64,6 +66,7 @@ export async function listPaymentRequests(order: "asc" | "desc" = "desc") {
 export async function createPaymentRequestAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/payment-request");
   const db = await getDb();
 
   await db.insert(paymentRequests).values({
@@ -71,6 +74,8 @@ export async function createPaymentRequestAction(formData: FormData) {
     description: requiredString(formData, "description"),
     destinationAccount: requiredString(formData, "destinationAccount"),
     requestDate: asString(formData.get("requestDate")) || todayKey(),
+    requestedByUserId: user.id,
+    requestedByUsername: user.username,
     sourceFund: requiredString(formData, "sourceFund"),
     status: asString(formData.get("status")),
     transactionPurpose: requiredString(formData, "transactionPurpose"),
@@ -79,19 +84,58 @@ export async function createPaymentRequestAction(formData: FormData) {
   revalidatePath("/payment-request");
 }
 
-export async function updatePaymentRequestStatusAction(formData: FormData) {
+export async function updatePaymentRequestAction(formData: FormData) {
   "use server";
 
+  await requireUser("/payment-request");
   const id = requiredString(formData, "id");
   const db = await getDb();
 
   await db
     .update(paymentRequests)
     .set({
+      amount: parseAmount(formData.get("amount")),
+      description: requiredString(formData, "description"),
+      destinationAccount: requiredString(formData, "destinationAccount"),
+      requestDate: requiredString(formData, "requestDate"),
+      sourceFund: requiredString(formData, "sourceFund"),
       status: asString(formData.get("status")),
+      transactionPurpose: requiredString(formData, "transactionPurpose"),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(paymentRequests.id, id));
+
+  revalidatePath("/payment-request");
+}
+
+export async function deletePaymentRequestAction(formData: FormData) {
+  "use server";
+
+  const user = await requireSuperadmin();
+  const id = requiredString(formData, "id");
+  const db = await getDb();
+  const existing = await db.query.paymentRequests.findFirst({
+    where: eq(paymentRequests.id, id),
+  });
+
+  if (!existing) {
+    revalidatePath("/payment-request");
+    return;
+  }
+
+  await db.delete(paymentRequests).where(eq(paymentRequests.id, id));
+  await recordAdminAuditLog({
+    action: "payment_request_deleted",
+    actor: user,
+    details: {
+      amount: existing.amount,
+      description: existing.description,
+      requestDate: existing.requestDate,
+      requestedByUsername: existing.requestedByUsername,
+      sourceFund: existing.sourceFund,
+    },
+    targetUsername: existing.requestedByUsername,
+  });
 
   revalidatePath("/payment-request");
 }
