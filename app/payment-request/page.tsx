@@ -3,6 +3,7 @@ import { AppShell } from "../components/AppShell";
 import { ConfirmForm } from "../components/ConfirmForm";
 import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
 import { requireUser } from "../auth";
+import { PaymentRequestTable } from "./PaymentRequestTable";
 import {
   createPaymentRequestAction,
   deletePaymentRequestAction,
@@ -22,12 +23,6 @@ function getSearchParam(
 
 function textMatches(value: unknown, query: string) {
   return String(value ?? "").toLowerCase().includes(query);
-}
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function todayKey() {
@@ -163,133 +158,12 @@ export default async function PaymentRequestPage({
           </div>
         </form>
 
-        <div className="customer-table-wrap">
-          <table className="customer-table payment-request-table">
-            <thead>
-              <tr>
-                <th>No</th>
-                <th>Tanggal</th>
-                <th>Diajukan Oleh</th>
-                <th>Sumber Dana</th>
-                <th>Nominal</th>
-                <th>Rek Tujuan</th>
-                <th>Deskripsi</th>
-                <th>Tujuan Transaksi</th>
-                <th>Status</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.length > 0 ? (
-                pageRows.map((row, index) => {
-                  const formId = `payment-request-${row.id}`;
-
-                  return (
-                    <tr key={row.id}>
-                      <td>{index + 1}</td>
-                      <td>
-                        <input
-                          className="inline-date-input"
-                          form={formId}
-                          name="requestDate"
-                          required
-                          type="date"
-                          defaultValue={row.requestDate}
-                        />
-                      </td>
-                      <td>{row.requestedByUsername || "-"}</td>
-                      <td>
-                        <input
-                          className="inline-text-input"
-                          form={formId}
-                          name="sourceFund"
-                          required
-                          defaultValue={row.sourceFund}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-money-input"
-                          form={formId}
-                          inputMode="numeric"
-                          name="amount"
-                          required
-                          defaultValue={formatRupiah(row.amount)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-text-input"
-                          form={formId}
-                          name="destinationAccount"
-                          required
-                          defaultValue={row.destinationAccount}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-text-input wide"
-                          form={formId}
-                          name="description"
-                          required
-                          defaultValue={row.description}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-text-input wide"
-                          form={formId}
-                          name="transactionPurpose"
-                          required
-                          defaultValue={row.transactionPurpose}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          aria-label={`Status ${row.description}`}
-                          className="inline-status-input"
-                          form={formId}
-                          name="status"
-                          placeholder="-"
-                          defaultValue={row.status}
-                        />
-                      </td>
-                      <td>
-                        <div className="table-actions">
-                          <ConfirmForm
-                            action={updatePaymentRequestAction}
-                            confirmMessage={`Simpan perubahan payment request ${row.description}?`}
-                            id={formId}
-                          >
-                            <input name="id" type="hidden" value={row.id} />
-                            <button className="inline-save-button" type="submit">
-                              Save
-                            </button>
-                          </ConfirmForm>
-                          {canDelete ? (
-                            <ConfirmForm
-                              action={deletePaymentRequestAction}
-                              confirmMessage={`Hapus payment request ${row.description}?`}
-                            >
-                              <input name="id" type="hidden" value={row.id} />
-                              <button className="danger" type="submit">
-                                Delete
-                              </button>
-                            </ConfirmForm>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={10}>Belum ada payment request sesuai filter.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <PaymentRequestTable
+          canDelete={canDelete}
+          deleteAction={deletePaymentRequestAction}
+          rows={pageRows}
+          updateAction={updatePaymentRequestAction}
+        />
         <Pagination
           currentPage={safePage}
           params={params}
