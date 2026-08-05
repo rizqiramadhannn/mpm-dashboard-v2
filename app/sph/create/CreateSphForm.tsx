@@ -35,10 +35,26 @@ type CreateSphFormProps = {
     sphDate: string;
     sphId?: string;
     sphNo?: string;
+    status?: SphStatus;
   };
   submitLabel?: string;
   title?: string;
 };
+
+type SphStatus =
+  | "cek_harga"
+  | "menunggu_pengiriman"
+  | "proses_pengiriman"
+  | "selesai"
+  | "cancel";
+
+const sphStatusOptions: { label: string; value: SphStatus }[] = [
+  { label: "Cek Harga", value: "cek_harga" },
+  { label: "Menunggu Pengiriman", value: "menunggu_pengiriman" },
+  { label: "Proses Pengiriman", value: "proses_pengiriman" },
+  { label: "Selesai", value: "selesai" },
+  { label: "Cancel", value: "cancel" },
+];
 
 type ItemRow = {
   id: string | number;
@@ -178,6 +194,19 @@ export function CreateSphForm({
               defaultValue={initialValues?.additionalInfo}
             />
           </label>
+
+          {initialValues ? (
+            <label>
+              <span>Status</span>
+              <select name="status" defaultValue={initialValues.status ?? "cek_harga"}>
+                {sphStatusOptions.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         {selectedCustomer ? (

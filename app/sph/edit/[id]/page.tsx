@@ -15,6 +15,16 @@ import { CreateSphForm } from "../../create/CreateSphForm";
 
 export const dynamic = "force-dynamic";
 
+const sphStatuses = [
+  "cek_harga",
+  "menunggu_pengiriman",
+  "proses_pengiriman",
+  "selesai",
+  "cancel",
+] as const;
+
+type SphStatus = (typeof sphStatuses)[number];
+
 function requiredString(formData: FormData, key: string) {
   const value = formData.get(key);
 
@@ -48,6 +58,19 @@ function requiredId(formData: FormData, key: string) {
   }
 
   return value.trim();
+}
+
+function requiredSphStatus(formData: FormData) {
+  const value = formData.get("status");
+
+  if (
+    typeof value !== "string" ||
+    !sphStatuses.includes(value as SphStatus)
+  ) {
+    throw new Error("Status SPH tidak valid.");
+  }
+
+  return value as SphStatus;
 }
 
 function customerInitials(customerCode: string, customerName: string) {
@@ -164,6 +187,10 @@ function invoiceNoFromSph(sphNo: string) {
   return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
 }
 
+function isInvoiceEligibleSph(status: SphStatus) {
+  return !["cek_harga", "cancel"].includes(status);
+}
+
 function formatMoney(value: number) {
   return `Rp ${new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 0,
@@ -194,6 +221,7 @@ async function updateSphAction(formData: FormData) {
   const deliveryDate = optionalString(formData, "deliveryDate") || null;
   const etaDate = optionalString(formData, "etaDate") || null;
   const additionalInfo = optionalString(formData, "additionalInfo");
+  const status = requiredSphStatus(formData);
 
   const db = await getDb();
   const [existingSph] = await db
@@ -276,6 +304,7 @@ async function updateSphAction(formData: FormData) {
       paymentDueDate,
       paymentTerm,
       sphDate,
+      status,
       totalAmount,
     })
     .where(eq(sphDocuments.id, sphId));
@@ -321,7 +350,12 @@ async function updateSphAction(formData: FormData) {
       .limit(1);
   }
 
-  if (existingInvoice) {
+  const shouldHaveInvoice = isInvoiceEligibleSph(status);
+
+  if (existingInvoice && !shouldHaveInvoice) {
+    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
+    await db.delete(invoiceDocuments).where(eq(invoiceDocuments.id, existingInvoice.id));
+  } else if (existingInvoice) {
     await db
       .update(invoiceDocuments)
       .set({
@@ -353,7 +387,7 @@ async function updateSphAction(formData: FormData) {
         unitPrice: item.unitPrice,
       }))
     );
-  } else if (!["cek_harga", "draft", "cancel", "cancelled"].includes(existingSph.status)) {
+  } else if (shouldHaveInvoice) {
     const insertedInvoice = await db
       .insert(invoiceDocuments)
       .values({
@@ -415,6 +449,7 @@ export default async function EditSphPage({
       paymentTerm: sphDocuments.paymentTerm,
       sphDate: sphDocuments.sphDate,
       sphNo: sphDocuments.sphNo,
+      status: sphDocuments.status,
     })
     .from(sphDocuments)
     .where(eq(sphDocuments.id, id))
@@ -470,6 +505,7 @@ export default async function EditSphPage({
             sphDate: document.sphDate,
             sphId: id,
             sphNo: document.sphNo,
+            status: document.status,
           }}
           submitLabel="Update SPH"
           title="Edit SPH"
