@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getDb } from "../../../../../db";
 import { shipments } from "../../../../../db/schema";
+import { getCurrentUser, recordActivityLog } from "../../../../auth";
 
 type StoredFile = {
   base64: string;
@@ -49,6 +50,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getCurrentUser();
     const { id } = await params;
     const formData = await request.formData();
     const paidAmount = parseOptionalAmount(formData.get("paidAmount"));
@@ -95,6 +97,18 @@ export async function POST(
         shippingCost: nextShippingCost,
       })
       .where(eq(shipments.id, id));
+    if (user) {
+      await recordActivityLog({
+        action: "shipment_payment_updated",
+        actor: user,
+        details: {
+          paymentProofFilesAdded: newFiles.length,
+          shipmentId: id,
+          shippingCost: nextShippingCost,
+          paidAmount: nextPaidAmount,
+        },
+      });
+    }
 
     revalidatePath("/pengiriman");
 

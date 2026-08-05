@@ -82,9 +82,9 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         <section className="admin-audit-section">
           <div className="section-heading compact">
             <div>
-              <p className="page-kicker">Audit Log</p>
-              <h2>Aktivitas Admin</h2>
-              <p>Riwayat 50 aksi admin terakhir.</p>
+              <p className="page-kicker">Activity Log</p>
+              <h2>Aktivitas User</h2>
+              <p>Riwayat 50 aktivitas user terakhir.</p>
             </div>
           </div>
 
@@ -93,7 +93,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
               <thead>
                 <tr>
                   <th>Waktu</th>
-                  <th>Admin</th>
+                  <th>User</th>
                   <th>Aksi</th>
                   <th>Target</th>
                   <th>IP</th>
@@ -151,6 +151,31 @@ async function adminChangePasswordAction(formData: FormData) {
 
 function formatAction(action: string) {
   const labels: Record<string, string> = {
+    asset_created: "Buat asset",
+    asset_tracking_updated: "Update tracking asset",
+    asset_updated: "Update asset",
+    customer_created: "Buat customer",
+    customer_updated: "Update customer",
+    invoice_created_from_sph: "Buat invoice dari SPH",
+    invoice_ledger_updated: "Update ledger invoice",
+    invoice_recreated_from_sph: "Buat ulang invoice dari SPH",
+    invoice_updated: "Update invoice",
+    payment_request_created: "Buat Payment Request",
+    payment_request_deleted: "Hapus Payment Request",
+    payment_request_updated: "Update Payment Request",
+    shipment_created: "Buat pengiriman",
+    shipment_journey_updated: "Update journey pengiriman",
+    shipment_payment_updated: "Update pembayaran pengiriman",
+    sph_cancelled: "Cancel SPH",
+    sph_created: "Buat SPH",
+    sph_deleted: "Hapus SPH",
+    sph_updated: "Update SPH",
+    supplier_created: "Buat supplier",
+    supplier_deleted: "Hapus supplier",
+    supplier_updated: "Update supplier",
+    user_login: "Login",
+    user_logout: "Logout",
+    user_password_changed: "Ganti password sendiri",
     user_password_reset: "Reset password user",
   };
 
@@ -168,6 +193,18 @@ function formatAuditTime(value: string) {
 function formatDetails(details: Record<string, unknown>) {
   if (details.mustChangePassword) {
     return "User wajib ganti password saat login berikutnya.";
+  }
+
+  if (typeof details.description === "string") {
+    return details.description;
+  }
+
+  if (typeof details.name === "string") {
+    return details.name;
+  }
+
+  if (typeof details.itemName === "string") {
+    return details.itemName;
   }
 
   return "-";

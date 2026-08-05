@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { getDb } from "../../../db";
 import { customers, invoiceDocuments, sphDocuments, sphItems } from "../../../db/schema";
+import { recordActivityLog, requireUser } from "../../auth";
 import { listCustomers } from "../../customer/data";
 import { CreateSphForm } from "./CreateSphForm";
 
@@ -287,6 +288,7 @@ async function assertCustomerWithinCreditLimits(customer: {
 async function createSphAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/sph/create");
   const db = await getDb();
   const customerId = requiredString(formData, "customerId");
   const sphDate = requiredString(formData, "sphDate");
@@ -394,6 +396,17 @@ async function createSphAction(formData: FormData) {
       totalPrice: item.totalPrice,
     }))
   );
+  await recordActivityLog({
+    action: "sph_created",
+    actor: user,
+    details: {
+      customerName: customer.name,
+      sphId: insertedSph[0].id,
+      sphNo,
+      totalAmount,
+    },
+    targetUsername: customer.name,
+  });
 
   redirect("/sph/list");
 }

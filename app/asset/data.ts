@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { assets } from "../../db/schema";
+import { recordActivityLog, requireUser } from "../auth";
 
 const seededAssets = [
   {
@@ -162,9 +163,24 @@ export async function getAsset(id: string) {
 export async function createAssetAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/asset/add-new-asset");
   const db = await getDb();
+  const values = assetValuesFromForm(formData);
 
-  await db.insert(assets).values(assetValuesFromForm(formData));
+  const [inserted] = await db
+    .insert(assets)
+    .values(values)
+    .returning({ id: assets.id });
+  await recordActivityLog({
+    action: "asset_created",
+    actor: user,
+    details: {
+      assetCode: values.assetCode,
+      assetId: inserted.id,
+      itemName: values.itemName,
+    },
+    targetUsername: values.currentOrLastPic,
+  });
 
   revalidatePath("/asset");
   revalidatePath("/asset/add-new-asset");
@@ -175,15 +191,24 @@ export async function createAssetAction(formData: FormData) {
 export async function updateAssetAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/asset/asset-list");
   const db = await getDb();
+  const assetId = parseId(formData);
+  const values = assetValuesFromForm(formData);
 
   await db
     .update(assets)
     .set({
-      ...assetValuesFromForm(formData),
+      ...values,
       updatedAt: new Date().toISOString(),
     })
-    .where(eq(assets.id, parseId(formData)));
+    .where(eq(assets.id, assetId));
+  await recordActivityLog({
+    action: "asset_updated",
+    actor: user,
+    details: { assetCode: values.assetCode, assetId, itemName: values.itemName },
+    targetUsername: values.currentOrLastPic,
+  });
 
   revalidatePath("/asset");
   revalidatePath("/asset/asset-list");
@@ -193,20 +218,30 @@ export async function updateAssetAction(formData: FormData) {
 export async function updateAssetTrackingAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/asset/asset-list");
   const id = requiredString(formData, "id");
   const db = await getDb();
+  const nextValues = {
+    condition: asString(formData.get("condition")) || "Baik",
+    currentOrLastPic: requiredString(formData, "currentOrLastPic"),
+    location: requiredString(formData, "location"),
+    notes: asString(formData.get("notes")),
+    status: asString(formData.get("status")) || "Aktif",
+  };
 
   await db
     .update(assets)
     .set({
-      condition: asString(formData.get("condition")) || "Baik",
-      currentOrLastPic: requiredString(formData, "currentOrLastPic"),
-      location: requiredString(formData, "location"),
-      notes: asString(formData.get("notes")),
-      status: asString(formData.get("status")) || "Aktif",
+      ...nextValues,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(assets.id, id));
+  await recordActivityLog({
+    action: "asset_tracking_updated",
+    actor: user,
+    details: { assetId: id, location: nextValues.location, status: nextValues.status },
+    targetUsername: nextValues.currentOrLastPic,
+  });
 
   revalidatePath("/asset");
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../db";
 import { invoiceDocuments } from "../../../db/schema";
+import { getCurrentUser, recordActivityLog } from "../../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,7 @@ async function payloadFromRequest(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const user = await getCurrentUser();
     const payload = await payloadFromRequest(request);
     const id = typeof payload.id === "string" ? payload.id.trim() : "";
 
@@ -146,6 +148,21 @@ export async function PATCH(request: Request) {
 
     if (Object.keys(updates).length > 0) {
       await db.update(invoiceDocuments).set(updates).where(eq(invoiceDocuments.id, id));
+      if (user) {
+        await recordActivityLog({
+          action: "invoice_updated",
+          actor: user,
+          details: {
+            invoiceId: id,
+            paidAmount: updates.paidAmount,
+            paymentProofFilesAdded: payload.paymentProofFiles
+              ? (payload.paymentProofFiles as InvoiceStoredFile[]).length
+              : 0,
+            status: updates.status,
+            ttdMateraiUpdated: Boolean(payload.ttdMateraiFile),
+          },
+        });
+      }
     }
 
     revalidatePath("/dashboard");

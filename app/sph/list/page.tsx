@@ -5,6 +5,7 @@ import { AppShell } from "../../components/AppShell";
 import { ConfirmForm } from "../../components/ConfirmForm";
 import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
+import { recordActivityLog, requireUser } from "../../auth";
 import { ItemListModal } from "./ItemListModal";
 import { getDb } from "../../../db";
 import { invoiceDocuments, invoiceItems, sphDocuments, sphItems } from "../../../db/schema";
@@ -195,6 +196,7 @@ function CheckIcon() {
 async function deleteSphAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/sph/list");
   const idValue = formData.get("sphId");
 
   if (typeof idValue !== "string" || idValue.trim() === "") {
@@ -215,6 +217,11 @@ async function deleteSphAction(formData: FormData) {
   }
 
   await db.delete(sphDocuments).where(inArray(sphDocuments.id, [sphId]));
+  await recordActivityLog({
+    action: "sph_deleted",
+    actor: user,
+    details: { sphId },
+  });
   revalidatePath("/dashboard");
   revalidatePath("/invoice");
   revalidatePath("/sph/list");
@@ -223,6 +230,7 @@ async function deleteSphAction(formData: FormData) {
 async function cancelSphAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/sph/list");
   const idValue = formData.get("sphId");
 
   if (typeof idValue !== "string" || idValue.trim() === "") {
@@ -246,6 +254,11 @@ async function cancelSphAction(formData: FormData) {
     .update(sphDocuments)
     .set({ status: "cancel" })
     .where(eq(sphDocuments.id, sphId));
+  await recordActivityLog({
+    action: "sph_cancelled",
+    actor: user,
+    details: { sphId },
+  });
   revalidatePath("/dashboard");
   revalidatePath("/invoice");
   revalidatePath("/sph/list");
@@ -254,6 +267,7 @@ async function cancelSphAction(formData: FormData) {
 async function approveHargaAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/sph/list");
   const idValue = formData.get("sphId");
 
   if (typeof idValue !== "string" || idValue.trim() === "") {
@@ -362,6 +376,17 @@ async function approveHargaAction(formData: FormData) {
     .update(sphDocuments)
     .set({ status: "menunggu_pengiriman" })
     .where(eq(sphDocuments.id, sphId));
+  await recordActivityLog({
+    action: existingInvoice ? "invoice_recreated_from_sph" : "invoice_created_from_sph",
+    actor: user,
+    details: {
+      invoiceId,
+      sphId,
+      sphNo: document.sphNo,
+      totalAmount: document.totalAmount,
+    },
+    targetUsername: document.customerName,
+  });
   revalidatePath("/dashboard");
   revalidatePath("/invoice");
   revalidatePath("/pengiriman");

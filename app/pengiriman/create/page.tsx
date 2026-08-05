@@ -11,6 +11,7 @@ import {
   sphDocuments,
   sphItems,
 } from "../../../db/schema";
+import { recordActivityLog, requireUser } from "../../auth";
 import { listSuppliers } from "../../supplier/data";
 import { CreateShipmentItemsTable } from "./CreateShipmentItemsTable";
 
@@ -112,6 +113,7 @@ async function nextShipmentNo(
 async function createShipmentAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/pengiriman/create");
   const selectedItemIds = formData
     .getAll("selectedItemId")
     .filter((value): value is string => typeof value === "string" && value.trim() !== "")
@@ -257,6 +259,19 @@ async function createShipmentAction(formData: FormData) {
       .set({ status: "proses_pengiriman" })
       .where(inArray(sphDocuments.id, affectedSphIds));
   }
+
+  await recordActivityLog({
+    action: "shipment_created",
+    actor: user,
+    details: {
+      affectedSphCount: affectedSphIds.length,
+      shipmentId: insertedShipment.id,
+      shipmentNo,
+      shippingCost,
+      shippingVendor,
+    },
+    targetUsername: firstItem.customerName,
+  });
 
   revalidatePath("/pengiriman");
   revalidatePath("/dashboard");

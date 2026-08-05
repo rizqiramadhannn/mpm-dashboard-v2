@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { suppliers } from "../../db/schema";
+import { recordActivityLog, requireUser } from "../auth";
 
 const seededSuppliers = [
   {
@@ -415,8 +416,19 @@ export async function getSupplier(id: string) {
 export async function createSupplierAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/supplier/add-new-supplier");
   const db = await getDb();
-  await db.insert(suppliers).values(supplierValuesFromForm(formData));
+  const values = supplierValuesFromForm(formData);
+  const [inserted] = await db
+    .insert(suppliers)
+    .values(values)
+    .returning({ id: suppliers.id });
+  await recordActivityLog({
+    action: "supplier_created",
+    actor: user,
+    details: { name: values.name, supplierId: inserted.id },
+    targetUsername: values.name,
+  });
 
   revalidatePath("/supplier/add-new-supplier");
   revalidatePath("/supplier/supplier-list");
@@ -426,11 +438,20 @@ export async function createSupplierAction(formData: FormData) {
 export async function updateSupplierAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/supplier/supplier-list");
   const db = await getDb();
+  const supplierId = parseId(formData);
+  const values = supplierValuesFromForm(formData);
   await db
     .update(suppliers)
-    .set(supplierValuesFromForm(formData))
-    .where(eq(suppliers.id, parseId(formData)));
+    .set(values)
+    .where(eq(suppliers.id, supplierId));
+  await recordActivityLog({
+    action: "supplier_updated",
+    actor: user,
+    details: { name: values.name, supplierId },
+    targetUsername: values.name,
+  });
 
   revalidatePath("/supplier/supplier-list");
   redirect("/supplier/supplier-list");
@@ -439,8 +460,21 @@ export async function updateSupplierAction(formData: FormData) {
 export async function deleteSupplierAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/supplier/supplier-list");
   const db = await getDb();
-  await db.delete(suppliers).where(eq(suppliers.id, parseId(formData)));
+  const supplierId = parseId(formData);
+  const [existing] = await db
+    .select({ name: suppliers.name })
+    .from(suppliers)
+    .where(eq(suppliers.id, supplierId))
+    .limit(1);
+  await db.delete(suppliers).where(eq(suppliers.id, supplierId));
+  await recordActivityLog({
+    action: "supplier_deleted",
+    actor: user,
+    details: { name: existing?.name ?? "", supplierId },
+    targetUsername: existing?.name ?? "",
+  });
 
   revalidatePath("/supplier/supplier-list");
 }

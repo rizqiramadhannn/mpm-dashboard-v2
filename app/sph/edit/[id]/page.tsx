@@ -11,6 +11,7 @@ import {
   sphDocuments,
   sphItems,
 } from "../../../../db/schema";
+import { recordActivityLog, requireUser } from "../../../auth";
 import { CreateSphForm } from "../../create/CreateSphForm";
 
 export const dynamic = "force-dynamic";
@@ -213,6 +214,7 @@ function assertSphWithinCustomerLimit(customer: {
 async function updateSphAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/sph/list");
   const sphId = requiredId(formData, "sphId");
   const customerId = requiredId(formData, "customerId");
   const sphDate = requiredString(formData, "sphDate");
@@ -424,6 +426,18 @@ async function updateSphAction(formData: FormData) {
   revalidatePath("/invoice");
   revalidatePath("/sph/list");
   revalidatePath(`/sph/edit/${sphId}`);
+  await recordActivityLog({
+    action: "sph_updated",
+    actor: user,
+    details: {
+      customerName: customer.name,
+      sphId,
+      sphNo: existingSph.sphNo,
+      status,
+      totalAmount,
+    },
+    targetUsername: customer.name,
+  });
   redirect("/sph/list");
 }
 

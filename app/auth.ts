@@ -151,6 +151,13 @@ export async function authenticateUser(username: string, password: string) {
   };
   await clearFailedLogins(normalizedUsername, ipAddress);
   await setSessionCookie(authUser);
+  await recordActivityLog({
+    action: "user_login",
+    actor: authUser,
+    details: {},
+    targetUserId: authUser.id,
+    targetUsername: authUser.username,
+  });
 
   return { message: "", ok: true, user: authUser };
 }
@@ -184,6 +191,13 @@ export async function updateOwnPassword(
     .where(eq(appUsers.id, user.id));
 
   await setSessionCookie({ ...user, mustChangePassword: false });
+  await recordActivityLog({
+    action: "user_password_changed",
+    actor: user,
+    details: { selfService: true },
+    targetUserId: user.id,
+    targetUsername: user.username,
+  });
 
   return { ok: true, message: "" };
 }
@@ -215,7 +229,7 @@ export async function setUserPassword(
     })
     .where(eq(appUsers.id, targetUserId));
 
-  await recordAdminAuditLog({
+  await recordActivityLog({
     action: "user_password_reset",
     actor,
     details: {
@@ -263,7 +277,7 @@ export async function listAdminAuditLogs(limit = 50) {
     .limit(limit);
 }
 
-export async function recordAdminAuditLog({
+export async function recordActivityLog({
   action,
   actor,
   details,
@@ -289,7 +303,20 @@ export async function recordAdminAuditLog({
   });
 }
 
+export const recordAdminAuditLog = recordActivityLog;
+
 export async function signOut() {
+  const user = await getCurrentUser();
+  if (user) {
+    await recordActivityLog({
+      action: "user_logout",
+      actor: user,
+      details: {},
+      targetUserId: user.id,
+      targetUsername: user.username,
+    });
+  }
+
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
 }

@@ -9,6 +9,7 @@ import {
   sphDocuments,
   sphItems,
 } from "../../../db/schema";
+import { recordActivityLog, requireUser } from "../../auth";
 import { ShipmentJourneyForm } from "./ShipmentJourneyForm";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,7 @@ function parseInteger(value: FormDataEntryValue | null, key: string) {
 async function updateShipmentJourneyAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/pengiriman");
   const sphIdValue = formData.get("sphId");
 
   if (typeof sphIdValue !== "string" || sphIdValue.trim() === "") {
@@ -212,6 +214,15 @@ async function updateShipmentJourneyAction(formData: FormData) {
       .set({ status: nextStatus })
       .where(eq(sphDocuments.id, sphId));
   }
+
+  await recordActivityLog({
+    action: "shipment_journey_updated",
+    actor: user,
+    details: {
+      journeyCount: journeyValues.length,
+      sphId,
+    },
+  });
 
   revalidatePath("/dashboard");
   revalidatePath("/invoice");

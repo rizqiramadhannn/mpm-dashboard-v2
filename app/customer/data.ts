@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { customers } from "../../db/schema";
+import { recordActivityLog, requireUser } from "../auth";
 
 export const defaultMonthlyCreditLimit = 15_000_000;
 
@@ -193,8 +194,19 @@ export async function getCustomer(id: string | number) {
 export async function createCustomerAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/customer/add-new-customer");
   const db = await getDb();
-  await db.insert(customers).values(customerValuesFromForm(formData));
+  const values = customerValuesFromForm(formData);
+  const [inserted] = await db
+    .insert(customers)
+    .values(values)
+    .returning({ id: customers.id });
+  await recordActivityLog({
+    action: "customer_created",
+    actor: user,
+    details: { code: values.code, customerId: inserted.id, name: values.name },
+    targetUsername: values.name,
+  });
 
   revalidatePath("/customer/customer-list");
   revalidatePath("/customer/add-new-customer");
@@ -205,11 +217,20 @@ export async function createCustomerAction(formData: FormData) {
 export async function updateCustomerAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/customer/customer-list");
   const db = await getDb();
+  const customerId = parseId(formData);
+  const values = customerValuesFromForm(formData);
   await db
     .update(customers)
-    .set(customerValuesFromForm(formData))
-    .where(eq(customers.id, parseId(formData)));
+    .set(values)
+    .where(eq(customers.id, customerId));
+  await recordActivityLog({
+    action: "customer_updated",
+    actor: user,
+    details: { code: values.code, customerId, name: values.name },
+    targetUsername: values.name,
+  });
 
   revalidatePath("/customer/customer-list");
   revalidatePath("/customer/add-new-customer");

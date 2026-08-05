@@ -5,6 +5,7 @@ import { AppShell } from "../components/AppShell";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
+import { recordActivityLog, requireUser } from "../auth";
 import {
   invoiceDocuments,
   invoiceItems,
@@ -207,6 +208,7 @@ function parseAmount(value: FormDataEntryValue | null) {
 async function updateLedgerAmountAction(formData: FormData) {
   "use server";
 
+  const user = await requireUser("/invoice");
   const invoiceId = formData.get("invoiceId");
 
   if (typeof invoiceId !== "string" || !invoiceId.trim()) {
@@ -221,6 +223,15 @@ async function updateLedgerAmountAction(formData: FormData) {
     .update(invoiceDocuments)
     .set({ [field]: amount })
     .where(eq(invoiceDocuments.id, invoiceId.trim()));
+  await recordActivityLog({
+    action: "invoice_ledger_updated",
+    actor: user,
+    details: {
+      amount,
+      field,
+      invoiceId: invoiceId.trim(),
+    },
+  });
 
   revalidatePath("/invoice");
 }
