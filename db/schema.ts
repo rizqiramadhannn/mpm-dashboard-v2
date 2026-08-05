@@ -650,6 +650,38 @@ export const appLoginAttempts = sqliteTable(
   })
 );
 
+export const appAdminAuditLogs = sqliteTable(
+  "app_admin_audit_logs",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    actorUserId: text("actor_user_id").references(() => appUsers.id, {
+      onDelete: "set null",
+    }),
+    actorUsername: text("actor_username").notNull(),
+    action: text("action").notNull(),
+    targetUserId: text("target_user_id").references(() => appUsers.id, {
+      onDelete: "set null",
+    }),
+    targetUsername: text("target_username").notNull().default(""),
+    ipAddress: text("ip_address").notNull().default("unknown"),
+    detailsJson: text("details_json", {
+      mode: "json",
+    })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'`),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    actionIdx: index("app_admin_audit_logs_action_idx").on(table.action),
+    actorIdx: index("app_admin_audit_logs_actor_idx").on(table.actorUsername),
+    createdAtIdx: index("app_admin_audit_logs_created_at_idx").on(
+      table.createdAt
+    ),
+    targetIdx: index("app_admin_audit_logs_target_idx").on(table.targetUsername),
+  })
+);
+
 export const customersRelations = relations(customers, ({ many }) => ({
   sphDocuments: many(sphDocuments),
 }));

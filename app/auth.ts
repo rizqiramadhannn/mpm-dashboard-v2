@@ -2,12 +2,12 @@
 
 import { createHmac, pbkdf2, randomBytes, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, desc, eq, gt, lt } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "../db";
 import { randomId } from "../db/id";
-import { appLoginAttempts, appUsers } from "../db/schema";
+import { appAdminAuditLogs, appLoginAttempts, appUsers } from "../db/schema";
 
 const pbkdf2Async = promisify(pbkdf2);
 const SESSION_COOKIE = "mpm_session";
@@ -189,6 +189,7 @@ export async function updateOwnPassword(
 }
 
 export async function setUserPassword(
+  actor: AuthUser,
   targetUserId: string,
   newPassword: string
 ) {
@@ -198,6 +199,13 @@ export async function setUserPassword(
   }
 
   const db = await getDb();
+  const targetUser = await db.query.appUsers.findFirst({
+    where: eq(appUsers.id, targetUserId),
+  });
+  if (!targetUser) {
+    return { ok: false, message: "User tidak ditemukan." };
+  }
+
   await db
     .update(appUsers)
     .set({
@@ -206,6 +214,17 @@ export async function setUserPassword(
       updatedAt: new Date().toISOString(),
     })
     .where(eq(appUsers.id, targetUserId));
+
+  await recordAdminAuditLog({
+    action: "user_password_reset",
+    actor,
+    details: {
+      mustChangePassword: true,
+      targetRole: targetUser.role,
+    },
+    targetUserId,
+    targetUsername: targetUser.username,
+  });
 
   return { ok: true, message: "" };
 }
@@ -225,6 +244,23 @@ export async function listUsers() {
     })
     .from(appUsers)
     .orderBy(appUsers.username);
+}
+
+export async function listAdminAuditLogs(limit = 50) {
+  const db = await getDb();
+
+  return db
+    .select({
+      action: appAdminAuditLogs.action,
+      actorUsername: appAdminAuditLogs.actorUsername,
+      createdAt: appAdminAuditLogs.createdAt,
+      detailsJson: appAdminAuditLogs.detailsJson,
+      ipAddress: appAdminAuditLogs.ipAddress,
+      targetUsername: appAdminAuditLogs.targetUsername,
+    })
+    .from(appAdminAuditLogs)
+    .orderBy(desc(appAdminAuditLogs.createdAt))
+    .limit(limit);
 }
 
 export async function signOut() {
@@ -390,6 +426,32 @@ async function clearFailedLogins(username: string, ipAddress: string) {
         eq(appLoginAttempts.success, false)
       )
     );
+}
+
+async function recordAdminAuditLog({
+  action,
+  actor,
+  details,
+  targetUserId,
+  targetUsername,
+}: {
+  action: string;
+  actor: AuthUser;
+  details: Record<string, unknown>;
+  targetUserId: string;
+  targetUsername: string;
+}) {
+  const db = await getDb();
+  await db.insert(appAdminAuditLogs).values({
+    action,
+    actorUserId: actor.id,
+    actorUsername: actor.username,
+    detailsJson: details,
+    id: randomId(),
+    ipAddress: await getRequestIp(),
+    targetUserId,
+    targetUsername,
+  });
 }
 
 async function getRequestIp() {

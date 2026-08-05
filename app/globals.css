@@ -349,6 +349,17 @@ a {
   min-width: 180px;
 }
 
+.admin-audit-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.admin-audit-table {
+  min-width: 980px;
+}
+
 .page-kicker {
   color: var(--accent);
   font-size: 13px;
