@@ -40,6 +40,13 @@ function safeFileName(fileName: string, fallback: string) {
   return cleaned || fallback;
 }
 
+function contentDisposition(disposition: "attachment" | "inline", fileName: string) {
+  const asciiFileName = fileName.replace(/[^\x20-\x7E]+/g, "-").replace(/"+/g, "-");
+  const encodedFileName = encodeURIComponent(fileName);
+
+  return `${disposition}; filename="${asciiFileName}"; filename*=UTF-8''${encodedFileName}`;
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -59,7 +66,7 @@ export async function GET(
   return new Response(base64ToBytes(file.base64), {
     headers: {
       "cache-control": "no-store",
-      "content-disposition": `${disposition}; filename="${fileName}"`,
+      "content-disposition": contentDisposition(disposition, fileName),
       "content-type": file.mimeType || "application/octet-stream",
     },
   });
