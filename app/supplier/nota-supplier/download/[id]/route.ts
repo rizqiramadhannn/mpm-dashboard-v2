@@ -1,12 +1,34 @@
 import { NextResponse } from "next/server";
 import { getSupplierNoteFile } from "../../../notes/data";
 
-function base64ToBytes(base64: string) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
+export const dynamic = "force-dynamic";
 
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
+function base64ToBytes(base64: string) {
+  const cleanBase64 = base64
+    .replace(/^data:[^;]+;base64,/, "")
+    .replace(/\s/g, "");
+  const chunkSize = 0x8000;
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  for (let index = 0; index < cleanBase64.length; index += chunkSize) {
+    const binary = atob(cleanBase64.slice(index, index + chunkSize));
+    const chunk = new Uint8Array(binary.length);
+
+    for (let byteIndex = 0; byteIndex < binary.length; byteIndex += 1) {
+      chunk[byteIndex] = binary.charCodeAt(byteIndex);
+    }
+
+    chunks.push(chunk);
+    byteLength += chunk.length;
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
   }
 
   return bytes;
@@ -51,6 +73,7 @@ export async function GET(
 
   return new Response(base64ToBytes(file.base64), {
     headers: {
+      "cache-control": "no-store",
       "content-disposition": `${disposition}; filename="${fileName}"`,
       "content-type": mimeType,
     },
