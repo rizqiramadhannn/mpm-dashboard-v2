@@ -6,6 +6,7 @@ import { listSuppliers } from "../../supplier/data";
 import { getDb } from "../../../db";
 import {
   shipmentJourneys,
+  shipments,
   sphDocuments,
   sphItems,
 } from "../../../db/schema";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 type JourneyRow = {
   id: string;
+  shipmentId: string | null;
   sphItemId: string;
   splitNo: number;
   batchNo: number;
@@ -93,6 +95,16 @@ async function updateShipmentJourneyAction(formData: FormData) {
   }
 
   const itemIds = itemRows.map((item) => item.id);
+  const existingJourneys = await db
+    .select({
+      id: shipmentJourneys.id,
+      shipmentId: shipmentJourneys.shipmentId,
+    })
+    .from(shipmentJourneys)
+    .where(inArray(shipmentJourneys.sphItemId, itemIds));
+  const shipmentIdByJourneyId = new Map(
+    existingJourneys.map((journey) => [journey.id, journey.shipmentId])
+  );
   const journeyValues: (typeof shipmentJourneys.$inferInsert)[] = [];
 
   for (const item of itemRows) {
@@ -109,6 +121,7 @@ async function updateShipmentJourneyAction(formData: FormData) {
         formData.get(`customerReceived-${item.id}-${splitKey}`) === "on";
 
       return {
+        shipmentId: shipmentIdByJourneyId.get(splitKey) ?? null,
         destination: formText(formData, `destination-${item.id}-${splitKey}`),
         isShippingPaid: formData.get(`isShippingPaid-${item.id}-${splitKey}`) === "on",
         customerReceived,
@@ -171,6 +184,26 @@ async function updateShipmentJourneyAction(formData: FormData) {
 
   if (journeyValues.length > 0) {
     await db.insert(shipmentJourneys).values(journeyValues);
+  }
+
+  for (const [batchNo, batch] of batchDetails) {
+    const shipmentId = journeyValues.find(
+      (journey) => (journey.batchNo ?? 1) === batchNo && journey.shipmentId
+    )?.shipmentId;
+
+    if (!shipmentId) {
+      continue;
+    }
+
+    await db
+      .update(shipments)
+      .set({
+        isShippingPaid: batch.shippingCost > 0 ? batch.isShippingPaid : false,
+        shippingCost: batch.shippingCost,
+        shippingVendor: batch.shippingVendor,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(shipments.id, shipmentId));
   }
 
   const receivedQtyByItem = new Map<string, number>();
@@ -279,6 +312,7 @@ export default async function PengirimanDetailPage({
       ? await db
           .select({
             id: shipmentJourneys.id,
+            shipmentId: shipmentJourneys.shipmentId,
             sphItemId: shipmentJourneys.sphItemId,
             splitNo: shipmentJourneys.splitNo,
             batchNo: shipmentJourneys.batchNo,
