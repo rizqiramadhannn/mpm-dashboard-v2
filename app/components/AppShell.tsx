@@ -147,6 +147,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <Link
+            className={`nav-link ${isActive(pathname, "/bbr") ? "active" : ""}`}
+            href="/bbr"
+          >
+            BBR
+          </Link>
+
+          <Link
             className={`nav-link ${isActive(pathname, "/admin/users") ? "active" : ""}`}
             href="/admin/users"
           >

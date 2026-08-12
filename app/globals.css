@@ -2042,6 +2042,111 @@ a {
   text-align: center;
 }
 
+.bbr-calculator-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.calculator-summary-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.calculator-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.bbr-calculator-table {
+  min-width: 1880px;
+}
+
+.bbr-calculator-table th,
+.bbr-calculator-table td {
+  vertical-align: top;
+}
+
+.bbr-calculator-table input[aria-invalid="true"] {
+  border-color: var(--primary);
+  outline: 3px solid var(--primary-soft);
+}
+
+.bbr-calculator-table select {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  min-height: 36px;
+  min-width: 150px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.calculator-detail-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calculator-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calculator-breakdown-row {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e7ebf2;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.calculator-breakdown-row span,
+.calculator-inline-input span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.calculator-breakdown-row strong {
+  color: var(--foreground);
+  font-size: 14px;
+  text-align: right;
+}
+
+.calculator-breakdown-row.strong {
+  background: var(--primary-soft);
+  border-color: #ffd5d0;
+}
+
+.calculator-inline-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calculator-inline-input input {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  min-height: 42px;
+  padding: 9px 11px;
+  width: 100%;
+}
+
 .primary-button,
 .secondary-button,
 .icon-button {
@@ -2570,6 +2675,8 @@ a {
   .customer-preview,
   .payment-request-form,
   .workspace-card-grid,
+  .calculator-summary-grid,
+  .calculator-detail-grid,
   .supplier-review-grid,
   .shipment-grid,
   .shipment-grid.split-grid,
@@ -2590,6 +2697,16 @@ a {
 
   .shipment-heading-actions {
     justify-content: stretch;
+  }
+
+  .calculator-header-actions {
+    justify-content: stretch;
+  }
+
+  .calculator-header-actions .primary-button,
+  .calculator-header-actions .secondary-button {
+    text-align: center;
+    width: 100%;
   }
 
   .shipment-heading-actions .primary-button,
