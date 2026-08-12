@@ -550,7 +550,7 @@ export default async function PengirimanPage({
                               <Link
                                 aria-label={`Edit ${shipment.ttbNo}`}
                                 className="icon-action"
-                                href={`/pengiriman/${shipment.sphDocuments[0]?.id ?? ""}`}
+                                href={`/pengiriman/edit/${shipment.shipmentId}`}
                                 title={`Edit ${shipment.ttbNo}`}
                               >
                                 <EditIcon />

@@ -157,14 +157,27 @@ async function updateShipmentJourneyAction(formData: FormData) {
 
   const batchDetails = new Map<
     number,
-    { isShippingPaid: boolean; shippingCost: number; shippingVendor: string }
+    {
+      allCustomerReceived: boolean;
+      isShippingPaid: boolean;
+      latestStatus: string;
+      shippingCost: number;
+      shippingVendor: string;
+    }
   >();
 
   for (const journey of journeyValues) {
     const current = batchDetails.get(journey.batchNo ?? 1);
+    const latestStatus = journey.customerReceived
+      ? "TERKIRIM"
+      : (journey.latestStatus ?? "").trim();
 
     batchDetails.set(journey.batchNo ?? 1, {
+      allCustomerReceived: Boolean(
+        (current?.allCustomerReceived ?? true) && journey.customerReceived
+      ),
       isShippingPaid: Boolean(current?.isShippingPaid || journey.isShippingPaid),
+      latestStatus: latestStatus || current?.latestStatus || "",
       shippingCost: Math.max(current?.shippingCost ?? 0, journey.shippingCost ?? 0),
       shippingVendor: current?.shippingVendor || journey.shippingVendor || "",
     });
@@ -199,6 +212,9 @@ async function updateShipmentJourneyAction(formData: FormData) {
       .update(shipments)
       .set({
         isShippingPaid: batch.shippingCost > 0 ? batch.isShippingPaid : false,
+        latestStatus: batch.allCustomerReceived
+          ? "TERKIRIM"
+          : batch.latestStatus || "TERJADWAL",
         shippingCost: batch.shippingCost,
         shippingVendor: batch.shippingVendor,
         updatedAt: new Date().toISOString(),
