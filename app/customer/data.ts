@@ -15,6 +15,7 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Tesha",
     contactName: "Ibu Tesha",
+    phone: "",
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
@@ -26,6 +27,7 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tenggara",
     detailLine3: "Up Bapak Majid",
     contactName: "Bapak Majid",
+    phone: "",
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
@@ -37,6 +39,7 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tenggara",
     detailLine3: "Up Ibu Rahba",
     contactName: "Ibu Rahba",
+    phone: "",
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
@@ -48,6 +51,7 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Ayu",
     contactName: "Ibu Ayu",
+    phone: "",
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
@@ -59,6 +63,7 @@ export const seededCustomers = [
     detailLine2: "Sulawesi Tengah",
     detailLine3: "Up Ibu Linda",
     contactName: "Ibu Linda",
+    phone: "",
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
@@ -92,6 +97,30 @@ function parseRupiah(formData: FormData, key: string, fallback = 0) {
   return amount;
 }
 
+function normalizedPhone(formData: FormData, key: string) {
+  const raw = optionalString(formData, key);
+
+  if (!raw) {
+    return "";
+  }
+
+  const hasPlusPrefix = raw.trim().startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+  const normalized = digits.startsWith("0")
+    ? `62${digits.slice(1)}`
+    : digits.startsWith("62")
+      ? digits
+      : hasPlusPrefix
+        ? digits
+        : `62${digits}`;
+
+  if (!/^62[1-9]\d{7,14}$/.test(normalized)) {
+    throw new Error(`${key} harus nomor HP Indonesia valid.`);
+  }
+
+  return `+${normalized}`;
+}
+
 function parseId(formData: FormData) {
   const id = formData.get("id");
 
@@ -110,6 +139,7 @@ function customerValuesFromForm(formData: FormData) {
     detailLine2: requiredString(formData, "detailLine2"),
     detailLine3: optionalString(formData, "detailLine3"),
     contactName: optionalString(formData, "contactName"),
+    phone: normalizedPhone(formData, "phone"),
     defaultPaymentTerm: requiredString(formData, "defaultPaymentTerm"),
     monthlyCreditLimit: parseRupiah(
       formData,
@@ -149,6 +179,7 @@ export async function listCustomers() {
       detailLine2: customers.detailLine2,
       detailLine3: customers.detailLine3,
       contactName: customers.contactName,
+      phone: customers.phone,
       defaultPaymentTerm: customers.defaultPaymentTerm,
       monthlyCreditLimit: customers.monthlyCreditLimit,
       sphCreditLimit: customers.sphCreditLimit,
@@ -176,6 +207,7 @@ export async function getCustomer(id: string | number) {
       detailLine2: customers.detailLine2,
       detailLine3: customers.detailLine3,
       contactName: customers.contactName,
+      phone: customers.phone,
       defaultPaymentTerm: customers.defaultPaymentTerm,
       monthlyCreditLimit: customers.monthlyCreditLimit,
       sphCreditLimit: customers.sphCreditLimit,

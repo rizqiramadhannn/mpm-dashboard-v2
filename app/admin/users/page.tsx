@@ -41,7 +41,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
         {params.error ? <p className="auth-error inline">{params.error}</p> : null}
 
         <div className="customer-table-wrap">
-          <table className="customer-table">
+          <table className="customer-table" data-sortable-table>
             <thead>
               <tr>
                 <th>Username</th>
@@ -89,7 +89,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
           </div>
 
           <div className="customer-table-wrap">
-            <table className="customer-table admin-audit-table">
+            <table className="customer-table admin-audit-table" data-sortable-table>
               <thead>
                 <tr>
                   <th>Waktu</th>

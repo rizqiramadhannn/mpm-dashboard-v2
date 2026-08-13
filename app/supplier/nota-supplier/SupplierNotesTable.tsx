@@ -133,6 +133,24 @@ function invoiceFiles(note: SupplierNote): SupplierNoteFile[] {
   ];
 }
 
+function paymentStatusClassName(status: string) {
+  const normalized = status.trim().toUpperCase();
+
+  if (normalized === "LUNAS") {
+    return "lunas";
+  }
+
+  if (normalized === "DP") {
+    return "dp";
+  }
+
+  if (normalized === "BELUM BAYAR") {
+    return "belum-bayar";
+  }
+
+  return "neutral";
+}
+
 export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
   const [rows, setRows] = useState(notes);
   const [preview, setPreview] = useState<PreviewState>(null);
@@ -280,7 +298,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
   return (
     <>
       <div className="customer-table-wrap">
-        <table className="customer-table supplier-note-table">
+        <table className="customer-table supplier-note-table" data-sortable-table>
           <thead>
             <tr>
               <th>No Nota</th>
@@ -314,7 +332,13 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                     <td>{formatRupiah(note.amount)}</td>
                     <td>
                       <div className="stacked-cell">
-                        <strong>{note.paymentStatus}</strong>
+                        <span
+                          className={`supplier-payment-status ${paymentStatusClassName(
+                            note.paymentStatus
+                          )}`}
+                        >
+                          {note.paymentStatus || "-"}
+                        </span>
                         <button
                           className="paid-amount-display"
                           disabled={savingId === note.id}

@@ -52,7 +52,7 @@ export function SupplierNoteItemListModal({
             </div>
 
             <div className="item-list-modal-body">
-              <table className="customer-table item-list-modal-table">
+              <table className="customer-table item-list-modal-table" data-sortable-table>
                 <thead>
                   <tr>
                     <th>No</th>

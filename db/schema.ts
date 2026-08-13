@@ -19,6 +19,7 @@ export const customers = sqliteTable(
     detailLine2: text("detail_line_2").notNull().default(""),
     detailLine3: text("detail_line_3").notNull().default(""),
     contactName: text("contact_name").notNull().default(""),
+    phone: text("phone").notNull().default(""),
     defaultPaymentTerm: text("default_payment_term").notNull().default("CBD"),
     monthlyCreditLimit: integer("credit_limit").notNull().default(15_000_000),
     sphCreditLimit: integer("sph_credit_limit").notNull().default(0),

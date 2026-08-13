@@ -131,7 +131,7 @@ export default async function AssetListPage({
         </form>
 
         <div className="customer-table-wrap">
-          <table className="customer-table asset-table">
+          <table className="customer-table asset-table" data-sortable-table>
             <thead>
               <tr>
                 <th>Kode</th>

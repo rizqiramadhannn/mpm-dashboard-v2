@@ -1198,6 +1198,24 @@ a {
   font-weight: 800;
 }
 
+.customer-table th.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.customer-table th.sortable-header:hover {
+  color: var(--foreground);
+}
+
+.sort-indicator {
+  color: var(--primary);
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-left: 6px;
+}
+
 .customer-table td {
   color: #344054;
   font-weight: 650;
@@ -1694,6 +1712,44 @@ a {
 .paid-amount-display:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.supplier-payment-status {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 6px 9px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.supplier-payment-status.lunas {
+  background: #e9f8f2;
+  border-color: #b7ead5;
+  color: #047857;
+}
+
+.supplier-payment-status.dp {
+  background: #fff7df;
+  border-color: #f6dc91;
+  color: #9a6700;
+}
+
+.supplier-payment-status.belum-bayar {
+  background: var(--primary-soft);
+  border-color: #ffd5d0;
+  color: var(--primary);
+}
+
+.supplier-payment-status.neutral {
+  background: #eef2f7;
+  border-color: #d9dee8;
+  color: #475467;
 }
 
 .paid-amount-input {

@@ -537,7 +537,7 @@ export default async function ListSphPage({
         </form>
 
         <div className="customer-table-wrap">
-          <table className="customer-table sph-list-table">
+          <table className="customer-table sph-list-table" data-sortable-table>
             <thead>
               <tr>
                 <th>No. SPH</th>

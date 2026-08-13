@@ -40,6 +40,7 @@ export default async function CustomerListPage({
         customer.detailLine2,
         customer.detailLine3,
         customer.contactName,
+        customer.phone,
       ].some((value) => textMatches(value, query));
     const matchesProvince = !provinceFilter || customer.detailLine2 === provinceFilter;
 
@@ -57,7 +58,7 @@ export default async function CustomerListPage({
               <span>Search</span>
               <input
                 name="q"
-                placeholder="Kode, nama, lokasi, PIC"
+                placeholder="Kode, nama, lokasi, kontak, nomor HP"
                 defaultValue={getSearchParam(params, "q")}
               />
             </label>

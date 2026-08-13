@@ -387,7 +387,7 @@ export function InvoiceLedgerTable({
   return (
     <>
       <div className="customer-table-wrap invoice-ledger-wrap">
-        <table className="customer-table invoice-ledger-table">
+        <table className="customer-table invoice-ledger-table" data-sortable-table>
         <thead>
           <tr>
             <th>NO</th>

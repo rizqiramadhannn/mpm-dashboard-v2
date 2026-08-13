@@ -104,7 +104,7 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
         <SupplierNotesTable notes={notes} />
       ) : (
         <div className="customer-table-wrap">
-          <table className="customer-table supplier-note-item-table">
+          <table className="customer-table supplier-note-item-table" data-sortable-table>
             <thead>
               <tr>
                 <th>No Nota</th>

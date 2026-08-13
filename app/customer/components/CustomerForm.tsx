@@ -10,6 +10,7 @@ type CustomerRow = {
   detailLine2: string;
   detailLine3: string;
   contactName: string;
+  phone: string;
   defaultPaymentTerm: string;
   monthlyCreditLimit: number;
   sphCreditLimit: number;
@@ -30,6 +31,42 @@ function formatMoney(value: number) {
   return `Rp ${new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 0,
   }).format(value)}`;
+}
+
+function whatsappUrl(phone: string) {
+  const digits = phone.replace(/[^\d]/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  const normalized = digits.startsWith("0")
+    ? `62${digits.slice(1)}`
+    : digits.startsWith("62")
+      ? digits
+      : `62${digits}`;
+
+  return /^62[1-9]\d{7,14}$/.test(normalized) ? `https://wa.me/${normalized}` : "";
+}
+
+function MessageIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="16" viewBox="0 0 24 24" width="16">
+      <path
+        d="M21 11.5a8.4 8.4 0 0 1-9 8.3 8.7 8.7 0 0 1-3.9-.9L3 20l1.2-4.8A8 8 0 0 1 3 11.5a8.5 8.5 0 0 1 18 0Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M8 10.5h8M8 14h5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
 }
 
 export function CustomerForm({
@@ -114,11 +151,23 @@ export function CustomerForm({
           </label>
 
           <label>
-            <span>PIC</span>
+            <span>Kontak / PIC</span>
             <input
               name="contactName"
               defaultValue={customer?.contactName ?? ""}
               placeholder="Ibu Rahba"
+            />
+          </label>
+
+          <label>
+            <span>Nomor HP</span>
+            <input
+              name="phone"
+              defaultValue={customer?.phone ?? ""}
+              inputMode="tel"
+              pattern="(\\+?62|0)[0-9\\s-]{8,16}"
+              placeholder="08xxxxxxxxxx"
+              title="Masukkan nomor HP Indonesia, contoh 085212345678 atau +6285212345678"
             />
           </label>
 
@@ -167,7 +216,7 @@ export function CustomerForm({
         <>
           {listControls}
           <div className="customer-table-wrap">
-            <table className="customer-table">
+            <table className="customer-table" data-sortable-table>
               <thead>
                 <tr>
                   <th>Kode</th>
@@ -175,7 +224,8 @@ export function CustomerForm({
                   <th>Detail 1</th>
                   <th>Detail 2</th>
                   <th>Detail 3</th>
-                  <th>PIC</th>
+                  <th>Kontak / PIC</th>
+                  <th>Nomor HP</th>
                   <th>Payment Term</th>
                   <th>Limit Bulanan</th>
                   <th>Limit Per SPH</th>
@@ -192,6 +242,7 @@ export function CustomerForm({
                       <td>{customer.detailLine2}</td>
                       <td>{customer.detailLine3}</td>
                       <td>{customer.contactName}</td>
+                      <td>{customer.phone || "-"}</td>
                       <td>{customer.defaultPaymentTerm}</td>
                       <td>{formatMoney(customer.monthlyCreditLimit)}</td>
                       <td>
@@ -201,6 +252,18 @@ export function CustomerForm({
                       </td>
                       <td>
                         <div className="table-actions">
+                          {whatsappUrl(customer.phone) ? (
+                            <a
+                              aria-label={`Chat ${customer.name}`}
+                              className="icon-action success"
+                              href={whatsappUrl(customer.phone)}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                              title={`Chat ${customer.name}`}
+                            >
+                              <MessageIcon />
+                            </a>
+                          ) : null}
                           <a href={`/customer/edit-customer/${customer.id}`}>Edit</a>
                         </div>
                       </td>
@@ -208,7 +271,7 @@ export function CustomerForm({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={10}>Tidak ada customer sesuai filter.</td>
+                    <td colSpan={11}>Tidak ada customer sesuai filter.</td>
                   </tr>
                 )}
               </tbody>

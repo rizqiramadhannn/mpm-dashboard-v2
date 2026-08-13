@@ -158,7 +158,7 @@ export function SupplierList({
 
       {listControls}
       <div className="customer-table-wrap">
-        <table className="customer-table">
+        <table className="customer-table" data-sortable-table>
           <thead>
             <tr>
               <th>Nama Supplier</th>

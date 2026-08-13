@@ -434,7 +434,7 @@ export default async function PengirimanPage({
         </form>
 
         <div className="customer-table-wrap">
-          <table className="customer-table shipment-list-table">
+          <table className="customer-table shipment-list-table" data-sortable-table>
             <thead>
               <tr>
                 <th>No TTB</th>

@@ -121,7 +121,7 @@ export function PaymentRequestTable({
 
   return (
     <div className="customer-table-wrap">
-      <table className="customer-table payment-request-table">
+      <table className="customer-table payment-request-table" data-sortable-table>
         <thead>
           <tr>
             <th>No</th>

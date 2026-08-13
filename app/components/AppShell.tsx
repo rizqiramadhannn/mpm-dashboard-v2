@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { TableSorter } from "./TableSorter";
 
 type NavItem = {
   label: string;
@@ -193,6 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="main-content">
+        <TableSorter />
         <div className="main-content-body">{children}</div>
         <footer className="app-footer">
           <span>Copyright 2026 Rizqi Ramadhan all Rights Reserved</span>
