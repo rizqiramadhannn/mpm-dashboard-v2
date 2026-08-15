@@ -104,11 +104,16 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
         <SupplierNotesTable notes={notes} />
       ) : (
         <div className="customer-table-wrap">
-          <table className="customer-table supplier-note-item-table" data-sortable-table>
+          <table
+            className="customer-table supplier-note-item-table"
+            data-sortable-table
+            data-sort-column="0"
+            data-sort-direction="desc"
+          >
             <thead>
               <tr>
-                <th>No Nota</th>
                 <th>Tanggal</th>
+                <th>No Nota</th>
                 <th>Supplier</th>
                 <th>Flag</th>
                 <th>PN</th>
@@ -122,10 +127,10 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
               {itemRows.length > 0 ? (
                 itemRows.map((item) => (
                   <tr key={item.id}>
+                    <td data-sort-value={item.noteDate ?? ""}>{formatDate(item.noteDate)}</td>
                     <td>
                       <strong className="table-primary">{item.noteNo}</strong>
                     </td>
-                    <td>{formatDate(item.noteDate)}</td>
                     <td>{item.supplierName}</td>
                     <td>{item.flag}</td>
                     <td>{item.partNumber || "-"}</td>

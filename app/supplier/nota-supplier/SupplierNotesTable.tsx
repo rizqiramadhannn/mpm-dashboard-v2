@@ -298,11 +298,16 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
   return (
     <>
       <div className="customer-table-wrap">
-        <table className="customer-table supplier-note-table" data-sortable-table>
+        <table
+          className="customer-table supplier-note-table"
+          data-sortable-table
+          data-sort-column="0"
+          data-sort-direction="desc"
+        >
           <thead>
             <tr>
-              <th>No Nota</th>
               <th>Tanggal</th>
+              <th>No Nota</th>
               <th>Supplier</th>
               <th>Flag</th>
               <th>Total</th>
@@ -319,10 +324,10 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
 
                 return (
                   <tr key={note.id}>
+                    <td data-sort-value={note.noteDate ?? ""}>{formatDate(note.noteDate)}</td>
                     <td>
                       <strong className="table-primary">{note.noteNo}</strong>
                     </td>
-                    <td>{formatDate(note.noteDate)}</td>
                     <td>
                       <div className="stacked-cell">
                         <strong>{note.supplierName}</strong>

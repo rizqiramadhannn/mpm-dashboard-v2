@@ -421,7 +421,7 @@ export default async function ListSphPage({
       createdAt: sphDocuments.createdAt,
     })
     .from(sphDocuments)
-    .orderBy(desc(sphDocuments.createdAt), desc(sphDocuments.id));
+    .orderBy(desc(sphDocuments.sphNo), desc(sphDocuments.id));
 
   const documentIds = documents.map((document) => document.id);
   const itemRows: SphItemRow[] =
@@ -537,7 +537,12 @@ export default async function ListSphPage({
         </form>
 
         <div className="customer-table-wrap">
-          <table className="customer-table sph-list-table" data-sortable-table>
+          <table
+            className="customer-table sph-list-table"
+            data-sortable-table
+            data-sort-column="0"
+            data-sort-direction="desc"
+          >
             <thead>
               <tr>
                 <th>No. SPH</th>

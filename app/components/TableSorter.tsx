@@ -67,7 +67,11 @@ function sortTable(table: HTMLTableElement, columnIndex: number, direction: Sort
   const staticRows = rows.filter((row) => !sortableRows.includes(row));
 
   sortableRows.sort((left, right) =>
-    compareValues(left.cells[columnIndex]?.textContent ?? "", right.cells[columnIndex]?.textContent ?? "", direction)
+    compareValues(
+      left.cells[columnIndex]?.dataset.sortValue ?? left.cells[columnIndex]?.textContent ?? "",
+      right.cells[columnIndex]?.dataset.sortValue ?? right.cells[columnIndex]?.textContent ?? "",
+      direction
+    )
   );
 
   body.replaceChildren(...sortableRows, ...staticRows);
@@ -114,7 +118,10 @@ function initializeTable(table: HTMLTableElement) {
     });
   });
 
-  sortTable(table, 0, "asc");
+  const initialColumn = Number(table.dataset.sortColumn ?? 0);
+  const initialDirection = table.dataset.sortDirection === "desc" ? "desc" : "asc";
+
+  sortTable(table, initialColumn, initialDirection);
 }
 
 export function TableSorter() {
