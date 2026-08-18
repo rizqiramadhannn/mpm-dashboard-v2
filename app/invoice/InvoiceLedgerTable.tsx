@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { downloadExcel } from "../components/excelExport";
 
 type InvoiceFile = {
   mimeType: string;
@@ -125,6 +126,42 @@ export function InvoiceLedgerTable({
     () => new Map(localRows.map((row) => [row.sphId, row])),
     [localRows]
   );
+
+  function downloadRows() {
+    downloadExcel({
+      columns: [
+        { header: "NO", value: (_row, index) => index + 1, width: 8 },
+        { header: "TANGGAL", value: (row) => row.invoiceDateRaw || row.invoiceDate, width: 14 },
+        { header: "CUSTOMER", value: (row) => row.customerName, width: 26 },
+        { header: "NO SPH", value: (row) => row.sphNo, width: 20 },
+        { header: "NO INVOICE", value: (row) => row.invoiceNo, width: 20 },
+        { header: "CATEGORY", value: () => "SPARE PARTS", width: 16 },
+        { header: "OMSET", value: (row) => row.totalAmount, width: 16 },
+        { header: "TERBAYAR", value: (row) => row.paidAmount, width: 16 },
+        { header: "MODAL", value: (row) => row.modalAmount, width: 16 },
+        { header: "FEE", value: (row) => row.feeAmount, width: 16 },
+        { header: "ONGKIR", value: (row) => row.ongkirAmount, width: 16 },
+        { header: "KOD", value: (row) => row.kodAmount, width: 16 },
+        { header: "HPP", value: (row) => row.hppAmount, width: 16 },
+        { header: "GP", value: (row) => row.gpAmount, width: 16 },
+        { header: "%GP", value: (row) => row.gpPercent, width: 12 },
+        { header: "PEMBAYARAN", value: (row) => row.paymentTerm, width: 16 },
+        { header: "STATUS", value: (row) => row.status, width: 16 },
+        { header: "JADWAL PEMBAYARAN", value: (row) => row.paymentDueDate, width: 20 },
+        { header: "TANGGAL BAYAR", value: (row) => row.paymentDate, width: 16 },
+        { header: "AGING", value: (row) => row.aging, width: 10 },
+        { header: "TTD MATERAI", value: (row) => row.ttdMateraiFile?.name ?? "", width: 24 },
+        {
+          header: "BUKTI BAYAR",
+          value: (row) => row.paymentProofFiles.map((file) => file.name).join(", "),
+          width: 32,
+        },
+      ],
+      fileName: "list-invoice",
+      rows: localRows,
+      sheetName: "List Invoice",
+    });
+  }
 
   function beginEdit(row: LedgerRow, field: EditableField) {
     setEditing({ rowId: row.sphId, field });
@@ -386,6 +423,16 @@ export function InvoiceLedgerTable({
 
   return (
     <>
+      <div className="table-export-bar">
+        <button
+          className="secondary-button"
+          disabled={localRows.length === 0}
+          onClick={downloadRows}
+          type="button"
+        >
+          Download Excel
+        </button>
+      </div>
       <div className="customer-table-wrap invoice-ledger-wrap">
         <table className="customer-table invoice-ledger-table" data-sortable-table>
         <thead>

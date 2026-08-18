@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { downloadExcel } from "../../components/excelExport";
 import { SupplierNoteItemListModal } from "./SupplierNoteItemListModal";
 
 type SupplierNoteFile = {
@@ -158,6 +159,36 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
 
+  function downloadRows() {
+    downloadExcel({
+      columns: [
+        { header: "Tanggal", value: (note) => note.noteDate ?? "", width: 14 },
+        { header: "No Nota", value: (note) => note.noteNo, width: 20 },
+        { header: "Supplier", value: (note) => note.supplierName, width: 26 },
+        { header: "Flag", value: (note) => note.flag, width: 14 },
+        { header: "Total", value: (note) => note.amount, width: 16 },
+        { header: "Terbayar", value: (note) => note.paidAmount, width: 16 },
+        { header: "Sisa", value: (note) => note.remainingPayment, width: 16 },
+        { header: "Payment Status", value: (note) => note.paymentStatus, width: 18 },
+        { header: "Jatuh Tempo", value: (note) => note.paymentDeadline ?? "", width: 14 },
+        { header: "Jumlah Item", value: (note) => note.items.length, width: 12 },
+        {
+          header: "Invoice File",
+          value: (note) => note.invoiceFileName || note.invoiceFileUrl || "",
+          width: 28,
+        },
+        {
+          header: "Bukti Bayar",
+          value: (note) => note.paymentProofFiles.map((file) => file.name).join(", "),
+          width: 32,
+        },
+      ],
+      fileName: "list-nota-supplier",
+      rows,
+      sheetName: "List Nota Supplier",
+    });
+  }
+
   function openPreview(
     note: SupplierNote,
     type: "invoice" | "paymentProof",
@@ -297,6 +328,16 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
 
   return (
     <>
+      <div className="table-export-bar">
+        <button
+          className="secondary-button"
+          disabled={rows.length === 0}
+          onClick={downloadRows}
+          type="button"
+        >
+          Download Excel
+        </button>
+      </div>
       <div className="customer-table-wrap">
         <table
           className="customer-table supplier-note-table"

@@ -7,8 +7,16 @@ import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { recordActivityLog, requireUser } from "../../auth";
 import { ItemListModal } from "./ItemListModal";
+import { SphExcelDownload, type SphExportRow } from "./SphExcelDownload";
 import { getDb } from "../../../db";
-import { invoiceDocuments, invoiceItems, sphDocuments, sphItems } from "../../../db/schema";
+import {
+  invoiceDocuments,
+  invoiceItems,
+  shipmentJourneys,
+  shipments,
+  sphDocuments,
+  sphItems,
+} from "../../../db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +29,22 @@ type SphItemRow = {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+};
+
+type ShipmentJourneyRow = {
+  customerReceived: boolean;
+  latestStatus: string;
+  quantity: number;
+  shipmentId: string | null;
+  shippingVendor: string;
+  sphItemId: string;
+};
+
+type ShipmentHeaderRow = {
+  id: string;
+  latestStatus: string;
+  shipmentNo: string;
+  shippingVendor: string;
 };
 
 const sphStatuses = [
@@ -75,6 +99,45 @@ function statusLabel(status: string) {
   };
 
   return labels[status] ?? status;
+}
+
+function shipmentStatusLabel(status: string) {
+  const normalized = status.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    arrived: "Terkirim",
+    delivered: "Terkirim",
+    done: "Terkirim",
+    received: "Terkirim",
+    selesai: "Terkirim",
+    terkirim: "Terkirim",
+    terjadwal: "Terjadwal",
+  };
+
+  return labels[normalized] ?? status;
+}
+
+function itemDeliveryStatus({
+  itemQty,
+  journeys,
+}: {
+  itemQty: number;
+  journeys: ShipmentJourneyRow[];
+}) {
+  const shippedQty = journeys.reduce((total, journey) => total + journey.quantity, 0);
+  const receivedQty = journeys.reduce(
+    (total, journey) => total + (journey.customerReceived ? journey.quantity : 0),
+    0
+  );
+
+  if (receivedQty >= itemQty && itemQty > 0) {
+    return "Terkirim";
+  }
+
+  if (shippedQty > 0) {
+    return "Proses Pengiriman";
+  }
+
+  return "Menunggu Pengiriman";
 }
 
 function normalizedStatus(status: string) {
@@ -452,6 +515,49 @@ export default async function ListSphPage({
   for (const items of itemsBySph.values()) {
     items.sort((a, b) => a.lineNo - b.lineNo);
   }
+  const itemIds = itemRows.map((item) => item.id);
+  const journeyRows: ShipmentJourneyRow[] =
+    itemIds.length > 0
+      ? await db
+          .select({
+            customerReceived: shipmentJourneys.customerReceived,
+            latestStatus: shipmentJourneys.latestStatus,
+            quantity: shipmentJourneys.quantity,
+            shipmentId: shipmentJourneys.shipmentId,
+            shippingVendor: shipmentJourneys.shippingVendor,
+            sphItemId: shipmentJourneys.sphItemId,
+          })
+          .from(shipmentJourneys)
+          .where(inArray(shipmentJourneys.sphItemId, itemIds))
+      : [];
+  const shipmentIds = [
+    ...new Set(
+      journeyRows
+        .map((journey) => journey.shipmentId)
+        .filter((shipmentId): shipmentId is string => Boolean(shipmentId))
+    ),
+  ];
+  const shipmentRows: ShipmentHeaderRow[] =
+    shipmentIds.length > 0
+      ? await db
+          .select({
+            id: shipments.id,
+            latestStatus: shipments.latestStatus,
+            shipmentNo: shipments.shipmentNo,
+            shippingVendor: shipments.shippingVendor,
+          })
+          .from(shipments)
+          .where(inArray(shipments.id, shipmentIds))
+      : [];
+  const journeysByItem = new Map<string, ShipmentJourneyRow[]>();
+  const shipmentById = new Map(shipmentRows.map((shipment) => [shipment.id, shipment]));
+
+  for (const journey of journeyRows) {
+    const journeys = journeysByItem.get(journey.sphItemId) ?? [];
+    journeys.push(journey);
+    journeysByItem.set(journey.sphItemId, journeys);
+  }
+
   const paymentOptions = [...new Set(documents.map((document) => document.paymentTerm))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
@@ -483,6 +589,77 @@ export default async function ListSphPage({
     filteredDocuments,
     getCurrentPage(params)
   );
+  const exportRows: SphExportRow[] = pageRows.flatMap((document) => {
+    const items = itemsBySph.get(document.id) ?? [];
+
+    return items.map((item) => {
+      const journeys = journeysByItem.get(item.id) ?? [];
+      const receivedQty = journeys.reduce(
+        (total, journey) => total + (journey.customerReceived ? journey.quantity : 0),
+        0
+      );
+      const latestStatuses = [
+        ...new Set(
+          journeys
+            .map((journey) => {
+              const shipment = journey.shipmentId
+                ? shipmentById.get(journey.shipmentId)
+                : undefined;
+
+              return shipment?.latestStatus || journey.latestStatus;
+            })
+            .filter(Boolean)
+            .map(shipmentStatusLabel)
+        ),
+      ];
+      const shipmentNos = [
+        ...new Set(
+          journeys
+            .map((journey) =>
+              journey.shipmentId ? shipmentById.get(journey.shipmentId)?.shipmentNo : ""
+            )
+            .filter(Boolean)
+        ),
+      ];
+      const shippingVendors = [
+        ...new Set(
+          journeys
+            .map((journey) => {
+              const shipment = journey.shipmentId
+                ? shipmentById.get(journey.shipmentId)
+                : undefined;
+
+              return shipment?.shippingVendor || journey.shippingVendor;
+            })
+            .filter(Boolean)
+        ),
+      ];
+
+      return {
+        customerCode: document.customerCode,
+        customerName: document.customerName,
+        deliveryDate: document.deliveryDate,
+        etaDate: document.etaDate,
+        franco: document.franco,
+        itemDeliveryStatus: itemDeliveryStatus({ itemQty: item.quantity, journeys }),
+        latestShipmentStatus: latestStatuses.join(", ") || "-",
+        lineNo: item.lineNo,
+        partName: item.partName,
+        partNumber: item.partNumber,
+        paymentTerm: document.paymentTerm,
+        quantity: item.quantity,
+        receivedQty,
+        shippedQty: journeys.reduce((total, journey) => total + journey.quantity, 0),
+        shipmentNos: shipmentNos.join(", "),
+        shippingVendors: shippingVendors.join(", "),
+        sphDate: document.sphDate,
+        sphNo: document.sphNo,
+        sphStatus: statusLabel(document.status),
+        totalPrice: item.totalPrice,
+        unitPrice: item.unitPrice,
+      };
+    });
+  });
 
   return (
     <AppShell>
@@ -536,6 +713,7 @@ export default async function ListSphPage({
           </div>
         </form>
 
+        <SphExcelDownload rows={exportRows} />
         <div className="customer-table-wrap">
           <table
             className="customer-table sph-list-table"
