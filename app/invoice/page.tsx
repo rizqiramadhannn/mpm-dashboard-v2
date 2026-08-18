@@ -326,6 +326,7 @@ export default async function InvoicePage({
 }) {
   const params = (await searchParams) ?? {};
   const query = getSearchParam(params, "q").trim().toLowerCase();
+  const customerFilter = getSearchParam(params, "customer");
   const statusFilter = getSearchParam(params, "status");
   const paymentFilter = getSearchParam(params, "payment");
   const fromDate = getSearchParam(params, "from");
@@ -487,6 +488,9 @@ export default async function InvoicePage({
   const paymentOptions = [...new Set(ledgerRows.map((row) => row.paymentTerm))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
+  const customerOptions = [...new Set(ledgerRows.map((row) => row.customerName))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
   const statusOptions = [...new Set(ledgerRows.map((row) => row.status))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
@@ -500,11 +504,12 @@ export default async function InvoicePage({
         row.paymentTerm,
         row.status,
       ].some((value) => textMatches(value, query));
+    const matchesCustomer = !customerFilter || row.customerName === customerFilter;
     const matchesStatus = !statusFilter || row.status === statusFilter;
     const matchesPayment = !paymentFilter || row.paymentTerm === paymentFilter;
     const matchesDate = isWithinDateRange(row.invoiceDateRaw, fromDate, toDate);
 
-    return matchesQuery && matchesStatus && matchesPayment && matchesDate;
+    return matchesQuery && matchesCustomer && matchesStatus && matchesPayment && matchesDate;
   });
   const { pageRows, safePage } = paginateRows(
     filteredLedgerRows,
@@ -555,6 +560,17 @@ export default async function InvoicePage({
             />
           </label>
           <label>
+            <span>Customer</span>
+            <select name="customer" defaultValue={customerFilter}>
+              <option value="">Semua Customer</option>
+              {customerOptions.map((customer) => (
+                <option key={customer} value={customer}>
+                  {customer}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Status</span>
             <select name="status" defaultValue={statusFilter}>
               <option value="">Semua Status</option>
@@ -584,7 +600,15 @@ export default async function InvoicePage({
         </form>
 
         <InvoiceLedgerTable
-          key={[query, statusFilter, paymentFilter, fromDate, toDate, safePage].join("|")}
+          key={[
+            query,
+            customerFilter,
+            statusFilter,
+            paymentFilter,
+            fromDate,
+            toDate,
+            safePage,
+          ].join("|")}
           rows={pageRows}
           updateLedgerAmountAction={updateLedgerAmountAction}
         />

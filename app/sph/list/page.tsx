@@ -491,6 +491,7 @@ export default async function ListSphPage({
 }) {
   const params = (await searchParams) ?? {};
   const query = getSearchParam(params, "q").trim().toLowerCase();
+  const customerFilter = getSearchParam(params, "customer");
   const statusFilter = getSearchParam(params, "status");
   const paymentFilter = getSearchParam(params, "payment");
   const fromDate = getSearchParam(params, "from");
@@ -603,6 +604,9 @@ export default async function ListSphPage({
   const paymentOptions = [...new Set(documents.map((document) => document.paymentTerm))]
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
+  const customerOptions = [...new Set(documents.map((document) => document.customerName))]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
   const filteredDocuments = documents.filter((document) => {
     const items = itemsBySph.get(document.id) ?? [];
     const status = normalizedStatus(document.status);
@@ -622,10 +626,11 @@ export default async function ListSphPage({
       (statusFilter === "active"
         ? status !== "cancel" && status !== "selesai"
         : status === statusFilter);
+    const matchesCustomer = !customerFilter || document.customerName === customerFilter;
     const matchesPayment = !paymentFilter || document.paymentTerm === paymentFilter;
     const matchesDate = isWithinDateRange(document.sphDate, fromDate, toDate);
 
-    return matchesQuery && matchesStatus && matchesPayment && matchesDate;
+    return matchesQuery && matchesStatus && matchesCustomer && matchesPayment && matchesDate;
   });
   const { pageRows, safePage } = paginateRows(
     filteredDocuments,
@@ -732,6 +737,17 @@ export default async function ListSphPage({
               placeholder="No SPH, customer, tujuan, item"
               defaultValue={getSearchParam(params, "q")}
             />
+          </label>
+          <label>
+            <span>Customer</span>
+            <select name="customer" defaultValue={customerFilter}>
+              <option value="">Semua Customer</option>
+              {customerOptions.map((customer) => (
+                <option key={customer} value={customer}>
+                  {customer}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span>Status</span>
