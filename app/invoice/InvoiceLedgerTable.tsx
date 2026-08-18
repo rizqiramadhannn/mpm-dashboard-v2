@@ -317,7 +317,7 @@ export function InvoiceLedgerTable({
         onDoubleClick={() => beginEdit(row, field)}
         title={
           field === "paidAmount" && !canUpdatePaidAmount
-            ? "Hanya superadmin yang dapat mengubah terbayar"
+            ? "Hanya user superadmin yang dapat mengubah terbayar"
             : "Double click untuk edit"
         }
         type="button"

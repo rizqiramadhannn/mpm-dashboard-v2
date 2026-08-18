@@ -610,7 +610,7 @@ export default async function InvoicePage({
             toDate,
             safePage,
           ].join("|")}
-          canUpdatePaidAmount={user.role === "superadmin"}
+          canUpdatePaidAmount={user.username.toLowerCase() === "superadmin"}
           rows={pageRows}
           updateLedgerAmountAction={updateLedgerAmountAction}
         />
