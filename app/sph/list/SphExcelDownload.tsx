@@ -13,6 +13,11 @@ export type SphExportRow = {
   lineNo: number;
   partName: string;
   partNumber: string;
+  invoiceNo: string;
+  invoicePaidAmount: number;
+  invoicePaymentStatus: string;
+  invoiceRemainingAmount: number;
+  invoiceTotalAmount: number;
   paymentTerm: string;
   quantity: number;
   receivedQty: number;
@@ -39,6 +44,15 @@ export function SphExcelDownload({ rows }: { rows: SphExportRow[] }) {
         { header: "ETA", value: (row) => row.etaDate ?? "", width: 14 },
         { header: "Payment", value: (row) => row.paymentTerm, width: 16 },
         { header: "Status SPH", value: (row) => row.sphStatus, width: 20 },
+        { header: "No Invoice", value: (row) => row.invoiceNo, width: 20 },
+        {
+          header: "Status Pembayaran Invoice",
+          value: (row) => row.invoicePaymentStatus,
+          width: 26,
+        },
+        { header: "Total Invoice", value: (row) => row.invoiceTotalAmount, width: 16 },
+        { header: "Terbayar Invoice", value: (row) => row.invoicePaidAmount, width: 18 },
+        { header: "Sisa Invoice", value: (row) => row.invoiceRemainingAmount, width: 16 },
         { header: "Line", value: (row) => row.lineNo, width: 8 },
         { header: "Part Number", value: (row) => row.partNumber, width: 20 },
         { header: "Part Name", value: (row) => row.partName, width: 34 },

@@ -47,6 +47,14 @@ type ShipmentHeaderRow = {
   shippingVendor: string;
 };
 
+type InvoicePaymentRow = {
+  invoiceNo: string;
+  paidAmount: number;
+  sphId: string;
+  status: "draft" | "pending" | "pending_replace" | "done" | "cancelled";
+  totalAmount: number;
+};
+
 const sphStatuses = [
   "cek_harga",
   "menunggu_pengiriman",
@@ -138,6 +146,26 @@ function itemDeliveryStatus({
   }
 
   return "Menunggu Pengiriman";
+}
+
+function invoicePaymentStatus(invoice: InvoicePaymentRow | undefined) {
+  if (!invoice) {
+    return "Belum Ada Invoice";
+  }
+
+  if (invoice.status === "cancelled") {
+    return "Invoice Cancelled";
+  }
+
+  if (invoice.totalAmount > 0 && invoice.paidAmount >= invoice.totalAmount) {
+    return "Sudah Dibayar";
+  }
+
+  if (invoice.paidAmount > 0) {
+    return "DP";
+  }
+
+  return "Belum Dibayar";
 }
 
 function normalizedStatus(status: string) {
@@ -549,8 +577,22 @@ export default async function ListSphPage({
           .from(shipments)
           .where(inArray(shipments.id, shipmentIds))
       : [];
+  const invoiceRows: InvoicePaymentRow[] =
+    documentIds.length > 0
+      ? await db
+          .select({
+            invoiceNo: invoiceDocuments.invoiceNo,
+            paidAmount: invoiceDocuments.paidAmount,
+            sphId: invoiceDocuments.sphId,
+            status: invoiceDocuments.status,
+            totalAmount: invoiceDocuments.totalAmount,
+          })
+          .from(invoiceDocuments)
+          .where(inArray(invoiceDocuments.sphId, documentIds))
+      : [];
   const journeysByItem = new Map<string, ShipmentJourneyRow[]>();
   const shipmentById = new Map(shipmentRows.map((shipment) => [shipment.id, shipment]));
+  const invoiceBySph = new Map(invoiceRows.map((invoice) => [invoice.sphId, invoice]));
 
   for (const journey of journeyRows) {
     const journeys = journeysByItem.get(journey.sphItemId) ?? [];
@@ -591,6 +633,7 @@ export default async function ListSphPage({
   );
   const exportRows: SphExportRow[] = pageRows.flatMap((document) => {
     const items = itemsBySph.get(document.id) ?? [];
+    const invoice = invoiceBySph.get(document.id);
 
     return items.map((item) => {
       const journeys = journeysByItem.get(item.id) ?? [];
@@ -646,6 +689,13 @@ export default async function ListSphPage({
         lineNo: item.lineNo,
         partName: item.partName,
         partNumber: item.partNumber,
+        invoiceNo: invoice?.invoiceNo ?? "",
+        invoicePaidAmount: invoice?.paidAmount ?? 0,
+        invoicePaymentStatus: invoicePaymentStatus(invoice),
+        invoiceRemainingAmount: invoice
+          ? Math.max(invoice.totalAmount - invoice.paidAmount, 0)
+          : 0,
+        invoiceTotalAmount: invoice?.totalAmount ?? 0,
         paymentTerm: document.paymentTerm,
         quantity: item.quantity,
         receivedQty,
