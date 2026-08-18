@@ -16,6 +16,7 @@ type SupplierNote = {
   noteNo: string;
   noteDate: string | null;
   supplierName: string;
+  customerName: string;
   amount: number;
   paidAmount: number;
   paymentStatus: string;
@@ -165,6 +166,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
         { header: "Tanggal", value: (note) => note.noteDate ?? "", width: 14 },
         { header: "No Nota", value: (note) => note.noteNo, width: 20 },
         { header: "Supplier", value: (note) => note.supplierName, width: 26 },
+        { header: "Customer", value: (note) => note.customerName, width: 26 },
         { header: "Flag", value: (note) => note.flag, width: 14 },
         { header: "Total", value: (note) => note.amount, width: 16 },
         { header: "Terbayar", value: (note) => note.paidAmount, width: 16 },
@@ -350,6 +352,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
               <th>Tanggal</th>
               <th>No Nota</th>
               <th>Supplier</th>
+              <th>Customer</th>
               <th>Flag</th>
               <th>Total</th>
               <th>Payment</th>
@@ -374,6 +377,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                         <strong>{note.supplierName}</strong>
                       </div>
                     </td>
+                    <td>{note.customerName || "-"}</td>
                     <td>{note.flag}</td>
                     <td>{formatRupiah(note.amount)}</td>
                     <td>
@@ -503,7 +507,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
               })
             ) : (
               <tr>
-                <td colSpan={9}>Tidak ada nota supplier sesuai filter.</td>
+                <td colSpan={10}>Tidak ada nota supplier sesuai filter.</td>
               </tr>
             )}
           </tbody>

@@ -15,6 +15,7 @@ type SupplierNote = {
   noteNo: string;
   noteDate: string | null;
   supplierName: string;
+  customerName: string;
   category: string;
   amount: number;
   paidAmount: number;
@@ -75,6 +76,7 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
     note.items.map((item) => ({
       ...item,
       flag: note.flag,
+      customerName: note.customerName,
       noteDate: note.noteDate,
       noteNo: note.noteNo,
       supplierName: note.supplierName,
@@ -115,6 +117,7 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
                 <th>Tanggal</th>
                 <th>No Nota</th>
                 <th>Supplier</th>
+                <th>Customer</th>
                 <th>Flag</th>
                 <th>PN</th>
                 <th>Deskripsi</th>
@@ -132,6 +135,7 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
                       <strong className="table-primary">{item.noteNo}</strong>
                     </td>
                     <td>{item.supplierName}</td>
+                    <td>{item.customerName || "-"}</td>
                     <td>{item.flag}</td>
                     <td>{item.partNumber || "-"}</td>
                     <td>{item.description}</td>
@@ -144,7 +148,7 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9}>Tidak ada item nota supplier sesuai filter.</td>
+                  <td colSpan={10}>Tidak ada item nota supplier sesuai filter.</td>
                 </tr>
               )}
             </tbody>
