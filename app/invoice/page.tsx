@@ -324,6 +324,7 @@ export default async function InvoicePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const user = await requireUser("/invoice");
   const params = (await searchParams) ?? {};
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const customerFilter = getSearchParam(params, "customer");
@@ -609,6 +610,7 @@ export default async function InvoicePage({
             toDate,
             safePage,
           ].join("|")}
+          canUpdatePaidAmount={user.role === "superadmin"}
           rows={pageRows}
           updateLedgerAmountAction={updateLedgerAmountAction}
         />

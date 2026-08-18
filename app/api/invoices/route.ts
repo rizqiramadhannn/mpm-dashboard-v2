@@ -121,6 +121,13 @@ export async function PATCH(request: Request) {
     const updates: Partial<typeof invoiceDocuments.$inferInsert> = {};
 
     if ("paidAmount" in payload) {
+      if (user?.role !== "superadmin") {
+        return NextResponse.json(
+          { error: "Hanya superadmin yang dapat mengubah terbayar invoice." },
+          { status: 403 }
+        );
+      }
+
       const paidAmount = parseAmount(payload.paidAmount);
       updates.paidAmount = paidAmount;
       updates.status = paymentStatus(invoice.totalAmount, paidAmount, invoice.status);

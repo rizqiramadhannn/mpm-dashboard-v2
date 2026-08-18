@@ -47,6 +47,7 @@ type PreviewState = {
 } | null;
 
 type InvoiceLedgerTableProps = {
+  canUpdatePaidAmount: boolean;
   rows: LedgerRow[];
   updateLedgerAmountAction: (formData: FormData) => Promise<void>;
 };
@@ -111,6 +112,7 @@ function formatPercent(value: number, total: number) {
 }
 
 export function InvoiceLedgerTable({
+  canUpdatePaidAmount,
   rows,
   updateLedgerAmountAction,
 }: InvoiceLedgerTableProps) {
@@ -164,6 +166,10 @@ export function InvoiceLedgerTable({
   }
 
   function beginEdit(row: LedgerRow, field: EditableField) {
+    if (field === "paidAmount" && !canUpdatePaidAmount) {
+      return;
+    }
+
     setEditing({ rowId: row.sphId, field });
     setDraftValue(String(row[field] || ""));
   }
@@ -214,6 +220,11 @@ export function InvoiceLedgerTable({
     }
 
     const row = rowById.get(editing.rowId);
+
+    if (editing.field === "paidAmount" && !canUpdatePaidAmount) {
+      closeEdit();
+      return;
+    }
 
     if (!row?.invoiceId) {
       closeEdit();
@@ -273,6 +284,8 @@ export function InvoiceLedgerTable({
 
   function editableCell(row: LedgerRow, field: EditableField) {
     const isEditing = editing?.rowId === row.sphId && editing.field === field;
+    const disabled =
+      !row.invoiceId || (field === "paidAmount" && !canUpdatePaidAmount);
 
     if (isEditing) {
       return (
@@ -300,9 +313,13 @@ export function InvoiceLedgerTable({
     return (
       <button
         className="ledger-edit-button"
-        disabled={!row.invoiceId}
+        disabled={disabled}
         onDoubleClick={() => beginEdit(row, field)}
-        title="Double click untuk edit"
+        title={
+          field === "paidAmount" && !canUpdatePaidAmount
+            ? "Hanya superadmin yang dapat mengubah terbayar"
+            : "Double click untuk edit"
+        }
         type="button"
       >
         {formatMoney(row[field])}
