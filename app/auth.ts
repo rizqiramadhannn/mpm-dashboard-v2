@@ -106,8 +106,8 @@ export async function requireUser(returnTo = "/dashboard") {
   return user;
 }
 
-export async function requireSuperadmin() {
-  const user = await requireUser("/admin/users");
+export async function requireSuperadmin(returnTo = "/admin/users") {
+  const user = await requireUser(returnTo);
   if (user.role !== "superadmin") {
     redirect("/dashboard");
   }

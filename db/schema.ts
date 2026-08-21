@@ -616,6 +616,55 @@ export const assets = sqliteTable(
   })
 );
 
+export const employees = sqliteTable(
+  "employees",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    name: text("name").notNull(),
+    title: text("title").notNull().default(""),
+    jobdesk: text("jobdesk").notNull().default(""),
+    salary: integer("salary").notNull().default(0),
+    accountNumber: text("account_number").notNull().default(""),
+    status: text("status").notNull().default("Aktif"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    nameIdx: index("employees_name_idx").on(table.name),
+    statusIdx: index("employees_status_idx").on(table.status),
+  })
+);
+
+export const employeeSalaryPayments = sqliteTable(
+  "employee_salary_payments",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    employeeId: text("employee_id")
+      .notNull()
+      .references(() => employees.id, { onDelete: "cascade" }),
+    salaryMonth: text("salary_month").notNull(),
+    paymentDate: text("payment_date").notNull(),
+    baseSalary: integer("base_salary").notNull().default(0),
+    salesAmount: integer("sales_amount").notNull().default(0),
+    commissionAmount: integer("commission_amount").notNull().default(0),
+    additionalBonus: integer("additional_bonus").notNull().default(0),
+    deduction: integer("deduction").notNull().default(0),
+    totalPaid: integer("total_paid").notNull().default(0),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    employeeMonthIdx: uniqueIndex("employee_salary_payments_employee_month_idx").on(
+      table.employeeId,
+      table.salaryMonth
+    ),
+    paymentDateIdx: index("employee_salary_payments_payment_date_idx").on(
+      table.paymentDate
+    ),
+  })
+);
+
 export const appUsers = sqliteTable(
   "app_users",
   {
@@ -817,3 +866,17 @@ export const supplierNoteImportsRelations = relations(supplierNoteImports, ({ on
     references: [supplierNotes.id],
   }),
 }));
+
+export const employeesRelations = relations(employees, ({ many }) => ({
+  salaryPayments: many(employeeSalaryPayments),
+}));
+
+export const employeeSalaryPaymentsRelations = relations(
+  employeeSalaryPayments,
+  ({ one }) => ({
+    employee: one(employees, {
+      fields: [employeeSalaryPayments.employeeId],
+      references: [employees.id],
+    }),
+  })
+);

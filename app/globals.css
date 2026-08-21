@@ -1029,7 +1029,18 @@ a {
   padding: 8px 10px;
 }
 
-.payment-request-form input:focus {
+.payment-request-form select {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--foreground);
+  font: inherit;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.payment-request-form input:focus,
+.payment-request-form select:focus {
   border-color: var(--accent);
   outline: 3px solid #ccfbf1;
 }
@@ -1121,6 +1132,50 @@ a {
 
 .asset-table {
   min-width: 1680px;
+}
+
+.employee-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.employee-form .employee-jobdesk-field {
+  grid-column: span 2;
+}
+
+.employee-summary strong {
+  white-space: normal;
+}
+
+.employee-table {
+  min-width: 1840px;
+}
+
+.employee-history-table {
+  min-width: 1420px;
+}
+
+.employee-inline-input {
+  min-height: 34px;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.employee-inline-input.date {
+  min-width: 138px;
+}
+
+.employee-inline-input.money {
+  min-width: 118px;
+  text-align: right;
+}
+
+.employee-inline-input.note {
+  min-width: 170px;
+}
+
+.employee-actions {
+  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .asset-inline-form {
@@ -2736,6 +2791,10 @@ a {
     grid-column: auto;
   }
 
+  .employee-form .employee-jobdesk-field {
+    grid-column: auto;
+  }
+
   .cashflow-card,
   .chart-card,
   .dashboard-card:not(.cashflow-card):not(.chart-card) {
@@ -2777,6 +2836,7 @@ a {
   .workspace-card-grid,
   .calculator-summary-grid,
   .calculator-detail-grid,
+  .employee-form,
   .supplier-review-grid,
   .shipment-grid,
   .shipment-grid.split-grid,

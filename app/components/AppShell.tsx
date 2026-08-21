@@ -31,6 +31,11 @@ const assetItems: NavItem[] = [
   { label: "ASSET LIST", href: "/asset/asset-list" },
 ];
 
+const employeeItems: NavItem[] = [
+  { label: "ADD NEW EMPLOYEE", href: "/employee/add-new-employee" },
+  { label: "EMPLOYEE LIST", href: "/employee/employee-list" },
+];
+
 const inventoryUrl =
   "https://docs.google.com/spreadsheets/d/1YokPzd8cGFmHoN1xLvNaA-o-mDbt2A6sRqPkll7GHNY/edit?gid=1188437955#gid=1188437955&fvid=2137505468";
 
@@ -46,6 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const customerActive = pathname.startsWith("/customer");
   const supplierActive = pathname.startsWith("/supplier");
   const assetActive = pathname.startsWith("/asset");
+  const employeeActive = pathname.startsWith("/employee");
 
   return (
     <div className="app-shell">
@@ -139,6 +145,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             PAYMENT REQUEST
           </Link>
+
+          <div className="nav-group">
+            <div className={`nav-group-label ${employeeActive ? "active" : ""}`}>
+              EMPLOYEE
+            </div>
+            <div className="nav-children">
+              {employeeItems.map((item) => (
+                <Link
+                  className={`nav-link child ${isActive(pathname, item.href) ? "active" : ""}`}
+                  href={item.href}
+                  key={item.href}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
           <Link
             className={`nav-link ${isActive(pathname, "/workspace") ? "active" : ""}`}
