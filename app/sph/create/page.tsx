@@ -5,7 +5,7 @@ import { getDb } from "../../../db";
 import { customers, invoiceDocuments, sphDocuments, sphItems } from "../../../db/schema";
 import { recordActivityLog, requireUser } from "../../auth";
 import { listCustomers } from "../../customer/data";
-import { CreateSphForm } from "./CreateSphForm";
+import { CreateSphForm, type SphFormState } from "./CreateSphForm";
 
 export const dynamic = "force-dynamic";
 
@@ -285,128 +285,140 @@ async function assertCustomerWithinCreditLimits(customer: {
   }
 }
 
-async function createSphAction(formData: FormData) {
+async function createSphAction(
+  _state: SphFormState,
+  formData: FormData
+): Promise<SphFormState> {
   "use server";
 
   const user = await requireUser("/sph/create");
-  const db = await getDb();
-  const customerId = requiredString(formData, "customerId");
-  const sphDate = requiredString(formData, "sphDate");
-  const paymentTerm = requiredString(formData, "paymentTerm");
-  const franco = requiredString(formData, "franco");
-  const deliveryDate = optionalString(formData, "deliveryDate") || null;
-  const etaDate = optionalString(formData, "etaDate") || null;
-  const additionalInfo = optionalString(formData, "additionalInfo");
-  const { yy, mm } = toYearMonth(sphDate);
+  try {
+    const db = await getDb();
+    const customerId = requiredString(formData, "customerId");
+    const sphDate = requiredString(formData, "sphDate");
+    const paymentTerm = requiredString(formData, "paymentTerm");
+    const franco = requiredString(formData, "franco");
+    const deliveryDate = optionalString(formData, "deliveryDate") || null;
+    const etaDate = optionalString(formData, "etaDate") || null;
+    const additionalInfo = optionalString(formData, "additionalInfo");
+    const { yy, mm } = toYearMonth(sphDate);
 
-  const [customer] = await db
-    .select()
-    .from(customers)
-    .where(eq(customers.id, customerId))
-    .limit(1);
+    const [customer] = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.id, customerId))
+      .limit(1);
 
-  if (!customer) {
-    throw new Error("Customer tidak ditemukan.");
-  }
-
-  const partNumbers = formData.getAll("partNumber");
-  const partNames = formData.getAll("partName");
-  const quantities = formData.getAll("quantity");
-  const unitPrices = formData.getAll("unitPrice");
-
-  const items = partNames.map((partNameValue, index) => {
-    const partName = typeof partNameValue === "string" ? partNameValue.trim() : "";
-    const partNumberValue = partNumbers[index];
-    const partNumber =
-      typeof partNumberValue === "string" ? partNumberValue.trim() : "";
-    const quantity = parseInteger(quantities[index] ?? null, `Qty item ${index + 1}`);
-    const unitPrice = parseInteger(
-      unitPrices[index] ?? null,
-      `Harga item ${index + 1}`
-    );
-
-    if (!partName || quantity <= 0) {
-      throw new Error(`Item ${index + 1} belum lengkap.`);
+    if (!customer) {
+      throw new Error("Customer tidak ditemukan.");
     }
 
+    const partNumbers = formData.getAll("partNumber");
+    const partNames = formData.getAll("partName");
+    const quantities = formData.getAll("quantity");
+    const unitPrices = formData.getAll("unitPrice");
+
+    const items = partNames.map((partNameValue, index) => {
+      const partName = typeof partNameValue === "string" ? partNameValue.trim() : "";
+      const partNumberValue = partNumbers[index];
+      const partNumber =
+        typeof partNumberValue === "string" ? partNumberValue.trim() : "";
+      const quantity = parseInteger(quantities[index] ?? null, `Qty item ${index + 1}`);
+      const unitPrice = parseInteger(
+        unitPrices[index] ?? null,
+        `Harga item ${index + 1}`
+      );
+
+      if (!partName || quantity <= 0) {
+        throw new Error(`Item ${index + 1} belum lengkap.`);
+      }
+
+      return {
+        lineNo: index + 1,
+        partNumber,
+        partName,
+        quantity,
+        unitPrice,
+        totalPrice: quantity * unitPrice,
+      };
+    });
+
+    if (items.length === 0) {
+      throw new Error("Minimal satu item wajib diisi.");
+    }
+
+    const [latestSph] = await db
+      .select({ sequence: sphDocuments.sequence })
+      .from(sphDocuments)
+      .where(and(eq(sphDocuments.yy, yy), eq(sphDocuments.mm, mm)))
+      .orderBy(desc(sphDocuments.sequence))
+      .limit(1);
+
+    const sequence = (latestSph?.sequence ?? 0) + 1;
+    const customerCode = customerInitials(customer.code, customer.name);
+    const sphNo = `SPH${yy}${mm}${sequence.toString().padStart(3, "0")}${customerCode}`;
+    const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
+    const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
+
+    await assertCustomerWithinCreditLimits(customer, sphDate, totalAmount);
+
+    const insertedSph = await db
+      .insert(sphDocuments)
+      .values({
+        sphNo,
+        yy,
+        mm,
+        sequence,
+        customerCode,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerDetailLine1: customer.detailLine1,
+        customerDetailLine2: customer.detailLine2,
+        customerDetailLine3: customer.detailLine3,
+        paymentTerm,
+        franco,
+        sphDate,
+        deliveryDate,
+        etaDate,
+        paymentDueDate,
+        additionalInfo,
+        totalAmount,
+        amountInWords: toRupiahWords(totalAmount),
+        staticSnapshotJson: staticSphSnapshot,
+        status: "cek_harga",
+      })
+      .returning({ id: sphDocuments.id });
+
+    await db.insert(sphItems).values(
+      items.map((item) => ({
+        sphId: insertedSph[0].id,
+        lineNo: item.lineNo,
+        partNumber: item.partNumber,
+        partName: item.partName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      }))
+    );
+    await recordActivityLog({
+      action: "sph_created",
+      actor: user,
+      details: {
+        customerName: customer.name,
+        sphId: insertedSph[0].id,
+        sphNo,
+        totalAmount,
+      },
+      targetUsername: customer.name,
+    });
+  } catch (error) {
     return {
-      lineNo: index + 1,
-      partNumber,
-      partName,
-      quantity,
-      unitPrice,
-      totalPrice: quantity * unitPrice,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Gagal menyimpan SPH. Coba periksa data lalu simpan lagi.",
     };
-  });
-
-  if (items.length === 0) {
-    throw new Error("Minimal satu item wajib diisi.");
   }
-
-  const [latestSph] = await db
-    .select({ sequence: sphDocuments.sequence })
-    .from(sphDocuments)
-    .where(and(eq(sphDocuments.yy, yy), eq(sphDocuments.mm, mm)))
-    .orderBy(desc(sphDocuments.sequence))
-    .limit(1);
-
-  const sequence = (latestSph?.sequence ?? 0) + 1;
-  const customerCode = customerInitials(customer.code, customer.name);
-  const sphNo = `SPH${yy}${mm}${sequence.toString().padStart(3, "0")}${customerCode}`;
-  const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const paymentDueDate = paymentDueDateFromTerm(sphDate, paymentTerm);
-
-  await assertCustomerWithinCreditLimits(customer, sphDate, totalAmount);
-
-  const insertedSph = await db
-    .insert(sphDocuments)
-    .values({
-      sphNo,
-      yy,
-      mm,
-      sequence,
-      customerCode,
-      customerId: customer.id,
-      customerName: customer.name,
-      customerDetailLine1: customer.detailLine1,
-      customerDetailLine2: customer.detailLine2,
-      customerDetailLine3: customer.detailLine3,
-      paymentTerm,
-      franco,
-      sphDate,
-      deliveryDate,
-      etaDate,
-      paymentDueDate,
-      additionalInfo,
-      totalAmount,
-      amountInWords: toRupiahWords(totalAmount),
-      staticSnapshotJson: staticSphSnapshot,
-      status: "cek_harga",
-    })
-    .returning({ id: sphDocuments.id });
-
-  await db.insert(sphItems).values(
-    items.map((item) => ({
-      sphId: insertedSph[0].id,
-      lineNo: item.lineNo,
-      partNumber: item.partNumber,
-      partName: item.partName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
-    }))
-  );
-  await recordActivityLog({
-    action: "sph_created",
-    actor: user,
-    details: {
-      customerName: customer.name,
-      sphId: insertedSph[0].id,
-      sphNo,
-      totalAmount,
-    },
-    targetUsername: customer.name,
-  });
 
   redirect("/sph/list");
 }

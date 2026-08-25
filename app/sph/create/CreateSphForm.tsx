@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState, type FormEvent } from "react";
 import { ConfirmForm } from "../../components/ConfirmForm";
 
 type CustomerOption = {
@@ -16,7 +16,8 @@ type CustomerOption = {
 };
 
 type CreateSphFormProps = {
-  action: (formData: FormData) => Promise<void>;
+  action: (state: SphFormState, formData: FormData) => Promise<SphFormState>;
+  canEditStatus?: boolean;
   customers: CustomerOption[];
   initialValues?: {
     additionalInfo: string;
@@ -41,6 +42,10 @@ type CreateSphFormProps = {
   title?: string;
 };
 
+export type SphFormState = {
+  error: string;
+};
+
 type SphStatus =
   | "cek_harga"
   | "menunggu_pengiriman"
@@ -56,6 +61,22 @@ const sphStatusOptions: { label: string; value: SphStatus }[] = [
   { label: "Cancel", value: "cancel" },
 ];
 
+function calculateSphTotal(formData: FormData) {
+  const quantities = formData.getAll("quantity");
+  const unitPrices = formData.getAll("unitPrice");
+
+  return quantities.reduce((sum, quantityValue, index) => {
+    const quantity = Number(quantityValue);
+    const unitPrice = Number(unitPrices[index] ?? 0);
+
+    if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+      return sum;
+    }
+
+    return sum + quantity * unitPrice;
+  }, 0);
+}
+
 type ItemRow = {
   id: string | number;
   partName?: string;
@@ -66,13 +87,21 @@ type ItemRow = {
 
 export function CreateSphForm({
   action,
+  canEditStatus = true,
   customers,
   initialValues,
   submitLabel = "Simpan SPH",
   title = "Create SPH",
 }: CreateSphFormProps) {
+  const [state, formAction, isPending] = useActionState(action, { error: "" });
   const [rows, setRows] = useState<ItemRow[]>(
     initialValues?.items.length ? initialValues.items : [{ id: 1 }]
+  );
+  const [formTotal, setFormTotal] = useState(
+    initialValues?.items.reduce(
+      (sum, item) => sum + item.quantity * item.unitPrice,
+      0
+    ) ?? 0
   );
   const [selectedCustomerId, setSelectedCustomerId] = useState(
     initialValues?.customerId?.toString() ?? customers[0]?.id.toString() ?? ""
@@ -88,6 +117,9 @@ export function CreateSphForm({
     ? selectedCustomer.monthlyCreditLimit > 0 &&
       selectedCustomerOutstanding > selectedCustomer.monthlyCreditLimit
     : false;
+  const selectedCustomerSphOverLimit = selectedCustomer
+    ? selectedCustomer.sphCreditLimit > 0 && formTotal > selectedCustomer.sphCreditLimit
+    : false;
 
   function formatMoney(value: number) {
     return `Rp ${new Intl.NumberFormat("id-ID", {
@@ -99,19 +131,31 @@ export function CreateSphForm({
     setRows((current) => [...current, { id: Date.now() }]);
   }
 
-  function removeRow(id: string | number) {
+  function refreshFormTotal(form: HTMLFormElement) {
+    setFormTotal(calculateSphTotal(new FormData(form)));
+  }
+
+  function handleFormInput(event: FormEvent<HTMLFormElement>) {
+    refreshFormTotal(event.currentTarget);
+  }
+
+  function removeRow(id: string | number, form: HTMLFormElement | null) {
     setRows((current) =>
       current.length === 1 ? current : current.filter((row) => row.id !== id)
     );
+    if (form) {
+      requestAnimationFrame(() => refreshFormTotal(form));
+    }
   }
 
   return (
     <ConfirmForm
-      action={action}
+      action={formAction}
       className="sph-form"
       confirmMessage={
         initialValues ? "Simpan perubahan SPH ini?" : "Buat SPH baru dengan data ini?"
       }
+      onInput={handleFormInput}
     >
       {initialValues ? <input name="sphId" type="hidden" value={initialValues.sphId ?? ""} /> : null}
       <section className="form-section">
@@ -123,12 +167,19 @@ export function CreateSphForm({
           </div>
           <button
             className="primary-button"
-            disabled={customers.length === 0 || selectedCustomerOverLimit}
+            disabled={
+              customers.length === 0 ||
+              selectedCustomerOverLimit ||
+              selectedCustomerSphOverLimit ||
+              isPending
+            }
             type="submit"
           >
-            {submitLabel}
+            {isPending ? "Menyimpan..." : submitLabel}
           </button>
         </div>
+
+        {state.error ? <div className="empty-state">{state.error}</div> : null}
 
         {customers.length === 0 ? (
           <div className="empty-state">
@@ -195,7 +246,7 @@ export function CreateSphForm({
             />
           </label>
 
-          {initialValues ? (
+          {initialValues && canEditStatus ? (
             <label>
               <span>Status</span>
               <select name="status" defaultValue={initialValues.status ?? "cek_harga"}>
@@ -206,6 +257,22 @@ export function CreateSphForm({
                 ))}
               </select>
             </label>
+          ) : null}
+          {initialValues && !canEditStatus ? (
+            <>
+              <input name="status" type="hidden" value={initialValues.status ?? "cek_harga"} />
+              <label>
+                <span>Status</span>
+                <input
+                  disabled
+                  value={
+                    sphStatusOptions.find(
+                      (status) => status.value === (initialValues.status ?? "cek_harga")
+                    )?.label ?? initialValues.status ?? "Cek Harga"
+                  }
+                />
+              </label>
+            </>
           ) : null}
         </div>
 
@@ -231,9 +298,15 @@ export function CreateSphForm({
                 ? formatMoney(selectedCustomer.sphCreditLimit)
                 : "Tidak ada limit"}
             </span>
+            <span>Total SPH Saat Ini: {formatMoney(formTotal)}</span>
             <span>
               Invoice Belum Lunas Bulan Ini: {formatMoney(selectedCustomerOutstanding)}
             </span>
+            {selectedCustomerSphOverLimit ? (
+              <span className="credit-warning">
+                Total SPH melebihi limit per SPH customer ini.
+              </span>
+            ) : null}
             {selectedCustomerOverLimit ? (
               <span className="credit-warning">
                 SPH baru diblokir sampai outstanding invoice bulan ini turun di bawah limit.
@@ -308,7 +381,7 @@ export function CreateSphForm({
                       aria-label={`Hapus item ${index + 1}`}
                       className="icon-button"
                       disabled={rows.length === 1}
-                      onClick={() => removeRow(row.id)}
+                      onClick={(event) => removeRow(row.id, event.currentTarget.form)}
                       type="button"
                     >
                       x
