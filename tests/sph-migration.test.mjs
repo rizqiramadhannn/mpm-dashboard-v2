@@ -101,7 +101,7 @@ test("rejects SPH already in the target month", async () => {
   );
 });
 
-test("builds migrated numbers and keeps end-of-month dates valid", async () => {
+test("builds migrated numbers and moves the data date to the first target day", async () => {
   const { buildSphMigrationUpdates } = await loadMigrationModule();
   const [update] = buildSphMigrationUpdates({
     documents: [baseDocument()],
@@ -112,9 +112,9 @@ test("builds migrated numbers and keeps end-of-month dates valid", async () => {
   assert.deepEqual(JSON.parse(JSON.stringify(update)), {
     id: "sph-1",
     invoiceNo: "INV2609008ABC",
-    paymentDueDate: "2026-10-14",
+    paymentDueDate: "2026-09-15",
     sequence: 8,
-    sphDate: "2026-09-30",
+    sphDate: "2026-09-01",
     sphNo: "SPH2609008ABC",
   });
 });

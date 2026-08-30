@@ -253,7 +253,7 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
             <div className="preview-modal-header">
               <div className="preview-modal-title">
                 <strong id="migrate-month-title">Pilih Bulan Migrasi</strong>
-                <span>{selectedIds.length} SPH akan diberi nomor dan tanggal bulan baru</span>
+                <span>{selectedIds.length} SPH akan diberi nomor bulan baru</span>
               </div>
               <button disabled={isPending} onClick={() => setMonthOpen(false)} type="button">
                 Kembali
@@ -280,7 +280,7 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
             </div>
 
             <div className="migrate-sph-footer">
-              <span>Nomor SPH dan invoice terkait akan mengikuti bulan tujuan.</span>
+              <span>Tanggal data menjadi tanggal 1 bulan tujuan, tanggal PDF tetap.</span>
               <div className="migrate-sph-actions">
                 <button
                   className="secondary-button"

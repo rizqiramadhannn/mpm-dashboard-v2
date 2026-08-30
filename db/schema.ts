@@ -52,6 +52,7 @@ export const sphDocuments = sqliteTable(
     franco: text("franco").notNull().default(""),
     sourceFund: text("source_fund").notNull().default("MPM"),
     sphDate: text("sph_date").notNull(),
+    pdfSphDate: text("pdf_sph_date"),
     deliveryDate: text("delivery_date"),
     etaDate: text("eta_date"),
     paymentDueDate: text("payment_due_date"),

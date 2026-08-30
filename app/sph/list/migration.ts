@@ -87,15 +87,6 @@ export function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
   return sphDate;
 }
 
-function targetDateFromOriginal(originalDate: string, targetMonth: string) {
-  const { year } = assertValidTargetMonth(targetMonth);
-  const [, month] = targetMonth.split("-").map(Number);
-  const day = Number(originalDate.slice(8, 10)) || 1;
-  const lastDay = new Date(year, month, 0).getDate();
-
-  return `${targetMonth}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
-}
-
 export function buildSphMigrationUpdates({
   documents,
   latestSequence,
@@ -132,7 +123,7 @@ export function buildSphMigrationUpdates({
     .map((document, index) => {
       const sequence = latestSequence + index + 1;
       const sphNo = `SPH${yy}${mm}${String(sequence).padStart(3, "0")}${document.customerCode}`;
-      const sphDate = targetDateFromOriginal(document.sphDate, targetMonth);
+      const sphDate = `${targetMonth}-01`;
 
       return {
         id: document.id,

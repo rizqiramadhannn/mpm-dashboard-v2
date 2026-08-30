@@ -22,6 +22,7 @@ type StaticSphSnapshot = {
 type SphDocument = {
   sphNo: string;
   sphDate: string;
+  pdfSphDate: string | null;
   customerName: string;
   customerDetailLine1: string;
   customerDetailLine2: string;
@@ -340,7 +341,7 @@ function buildContent(document: SphDocument, items: SphItem[]) {
   content += text(365, 732, "Quo. No", 10, "F2");
   content += text(438, 732, document.sphNo, 9);
   content += text(365, 714, "Tanggal.", 10, "F2");
-  content += text(438, 714, formatDate(document.sphDate), 9);
+  content += text(438, 714, formatDate(document.pdfSphDate ?? document.sphDate), 9);
 
   addressLines.forEach((addressLine, index) => {
     content += text(left, 716 - index * 16, addressLine, 9);
@@ -553,6 +554,7 @@ export async function GET(
     .select({
       sphNo: sphDocuments.sphNo,
       sphDate: sphDocuments.sphDate,
+      pdfSphDate: sphDocuments.pdfSphDate,
       customerName: sphDocuments.customerName,
       customerDetailLine1: sphDocuments.customerDetailLine1,
       customerDetailLine2: sphDocuments.customerDetailLine2,

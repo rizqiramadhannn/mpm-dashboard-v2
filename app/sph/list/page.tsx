@@ -13,7 +13,6 @@ import {
   buildSphMigrationUpdates,
   invoiceNoFromMigratedSph,
   isMigratableSphStatus,
-  paymentDueDateFromTerm,
   assertValidTargetMonth,
 } from "./migration";
 import { getDb } from "../../../db";
@@ -523,6 +522,7 @@ async function migrateSphAction(formData: FormData) {
         id: sphDocuments.id,
         mm: sphDocuments.mm,
         paymentTerm: sphDocuments.paymentTerm,
+        pdfSphDate: sphDocuments.pdfSphDate,
         sphDate: sphDocuments.sphDate,
         sphNo: sphDocuments.sphNo,
         status: sphDocuments.status,
@@ -560,6 +560,7 @@ async function migrateSphAction(formData: FormData) {
           .set({
             mm,
             paymentDueDate: update.paymentDueDate,
+            pdfSphDate: document.pdfSphDate ?? document.sphDate,
             sequence: update.sequence,
             sphDate: update.sphDate,
             sphNo: update.sphNo,
@@ -570,14 +571,13 @@ async function migrateSphAction(formData: FormData) {
         const previousInvoiceNo = invoiceNoFromMigratedSph(document.sphNo);
         const nextInvoiceNo = update.invoiceNo;
         const invoiceDate = update.sphDate;
-        const paymentDueDate = paymentDueDateFromTerm(invoiceDate, document.paymentTerm);
 
         await tx
           .update(invoiceDocuments)
           .set({
             invoiceDate,
             invoiceNo: nextInvoiceNo,
-            paymentDueDate,
+            paymentDueDate: update.paymentDueDate,
           })
           .where(eq(invoiceDocuments.sphId, update.id));
 
