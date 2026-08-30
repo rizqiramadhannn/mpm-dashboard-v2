@@ -169,6 +169,7 @@ function formatAction(action: string) {
     sph_cancelled: "Cancel SPH",
     sph_created: "Buat SPH",
     sph_deleted: "Hapus SPH",
+    sph_migrated: "Migrate SPH",
     sph_updated: "Update SPH",
     supplier_created: "Buat supplier",
     supplier_deleted: "Hapus supplier",

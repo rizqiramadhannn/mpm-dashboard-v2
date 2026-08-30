@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { AppShell } from "../../components/AppShell";
@@ -7,11 +7,20 @@ import { DateRangeFilter } from "../../components/DateRangeFilter";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { recordActivityLog, requireUser } from "../../auth";
 import { ItemListModal } from "./ItemListModal";
+import { MigrateSphDialog } from "./MigrateSphDialog";
 import { SphExcelDownload, type SphExportRow } from "./SphExcelDownload";
+import {
+  buildSphMigrationUpdates,
+  invoiceNoFromMigratedSph,
+  isMigratableSphStatus,
+  paymentDueDateFromTerm,
+  assertValidTargetMonth,
+} from "./migration";
 import { getDb } from "../../../db";
 import {
   invoiceDocuments,
   invoiceItems,
+  invoiceLogs,
   shipmentJourneys,
   shipments,
   sphDocuments,
@@ -484,6 +493,133 @@ async function approveHargaAction(formData: FormData) {
   revalidatePath("/sph/list");
 }
 
+async function migrateSphAction(formData: FormData) {
+  "use server";
+
+  const user = await requireUser("/sph/list");
+
+  try {
+    const targetMonthValue = formData.get("targetMonth");
+    const targetMonth =
+      typeof targetMonthValue === "string" ? targetMonthValue.trim() : "";
+    const { mm, yy } = assertValidTargetMonth(targetMonth);
+    const sphIds = [
+      ...new Set(
+        formData
+          .getAll("sphId")
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .filter(Boolean)
+      ),
+    ];
+
+    if (sphIds.length === 0) {
+      throw new Error("Pilih minimal satu SPH untuk dimigrasi.");
+    }
+
+    const db = await getDb();
+    const documents = await db
+      .select({
+        customerCode: sphDocuments.customerCode,
+        id: sphDocuments.id,
+        mm: sphDocuments.mm,
+        paymentTerm: sphDocuments.paymentTerm,
+        sphDate: sphDocuments.sphDate,
+        sphNo: sphDocuments.sphNo,
+        status: sphDocuments.status,
+        yy: sphDocuments.yy,
+      })
+      .from(sphDocuments)
+      .where(inArray(sphDocuments.id, sphIds));
+
+    if (documents.length !== sphIds.length) {
+      throw new Error("Ada SPH yang tidak ditemukan. Refresh halaman lalu coba lagi.");
+    }
+
+    const [latestSph] = await db
+      .select({ sequence: sphDocuments.sequence })
+      .from(sphDocuments)
+      .where(and(eq(sphDocuments.yy, yy), eq(sphDocuments.mm, mm)))
+      .orderBy(desc(sphDocuments.sequence))
+      .limit(1);
+    const updates = buildSphMigrationUpdates({
+      documents,
+      latestSequence: latestSph?.sequence ?? 0,
+      targetMonth,
+    });
+
+    await db.transaction(async (tx) => {
+      for (const update of updates) {
+        const document = documents.find((row) => row.id === update.id);
+
+        if (!document) {
+          throw new Error("Ada SPH yang tidak ditemukan. Refresh halaman lalu coba lagi.");
+        }
+
+        await tx
+          .update(sphDocuments)
+          .set({
+            mm,
+            paymentDueDate: update.paymentDueDate,
+            sequence: update.sequence,
+            sphDate: update.sphDate,
+            sphNo: update.sphNo,
+            yy,
+          })
+          .where(eq(sphDocuments.id, update.id));
+
+        const previousInvoiceNo = invoiceNoFromMigratedSph(document.sphNo);
+        const nextInvoiceNo = update.invoiceNo;
+        const invoiceDate = update.sphDate;
+        const paymentDueDate = paymentDueDateFromTerm(invoiceDate, document.paymentTerm);
+
+        await tx
+          .update(invoiceDocuments)
+          .set({
+            invoiceDate,
+            invoiceNo: nextInvoiceNo,
+            paymentDueDate,
+          })
+          .where(eq(invoiceDocuments.sphId, update.id));
+
+        await tx
+          .update(invoiceLogs)
+          .set({
+            invoiceNo: nextInvoiceNo,
+            sphNo: update.sphNo,
+          })
+          .where(eq(invoiceLogs.sphNo, document.sphNo));
+
+        await tx
+          .update(invoiceLogs)
+          .set({
+            invoiceNo: nextInvoiceNo,
+            sphNo: update.sphNo,
+          })
+          .where(eq(invoiceLogs.invoiceNo, previousInvoiceNo));
+      }
+    });
+
+    await recordActivityLog({
+      action: "sph_migrated",
+      actor: user,
+      details: {
+        count: updates.length,
+        sphIds,
+        targetMonth,
+        updatedSphNos: updates.map((update) => update.sphNo),
+      },
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/employee/employee-list");
+    revalidatePath("/invoice");
+    revalidatePath("/sph/list");
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Gagal migrate SPH.",
+    };
+  }
+}
+
 export default async function ListSphPage({
   searchParams,
 }: {
@@ -724,9 +860,28 @@ export default async function ListSphPage({
             <p className="page-kicker">Surat Penawaran Harga</p>
             <h1>List SPH</h1>
           </div>
-          <Link className="primary-button" href="/sph/create">
-            Create SPH
-          </Link>
+          <div className="sph-header-actions">
+            <MigrateSphDialog
+              action={migrateSphAction}
+              rows={documents
+                .filter((document) => isMigratableSphStatus(document.status))
+                .map((document) => ({
+                  customerCode: document.customerCode,
+                  customerName: document.customerName,
+                  id: document.id,
+                  items: itemsBySph.get(document.id) ?? [],
+                  paymentTerm: document.paymentTerm,
+                  sphDate: document.sphDate,
+                  sphNo: document.sphNo,
+                  status: normalizedStatus(document.status),
+                  statusLabel: statusLabel(document.status),
+                  totalAmount: document.totalAmount,
+                }))}
+            />
+            <Link className="primary-button" href="/sph/create">
+              Create SPH
+            </Link>
+          </div>
         </div>
 
         <form className="table-filter-bar">
