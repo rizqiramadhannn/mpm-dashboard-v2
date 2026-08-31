@@ -19,7 +19,7 @@ const workspaceLinks = [
     description: "Google Sheet tambahan untuk workspace.",
     href: "https://docs.google.com/spreadsheets/d/1tnVXBG0wqy8qI92_WRwBCPjWi65_DXMx8cXcRYE6iY8/edit?usp=sharing",
     label: "Buka Sheet",
-    title: "Workspace Sheet",
+    title: "Data Pengiriman Ban BCK",
     type: "Google Sheet",
   },
   {
