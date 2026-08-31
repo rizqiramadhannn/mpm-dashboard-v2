@@ -16,6 +16,13 @@ const workspaceLinks = [
     type: "Google Sheet",
   },
   {
+    description: "Google Sheet tambahan untuk workspace.",
+    href: "https://docs.google.com/spreadsheets/d/1tnVXBG0wqy8qI92_WRwBCPjWi65_DXMx8cXcRYE6iY8/edit?usp=sharing",
+    label: "Buka Sheet",
+    title: "Workspace Sheet",
+    type: "Google Sheet",
+  },
+  {
     description: "Folder Google Drive utama untuk dokumen MPM.",
     href: "https://drive.google.com/drive/folders/1PoiRTw0QZWAPVr5W7UFSItEAToMdITRN?usp=drive_link",
     label: "Buka Drive MPM",

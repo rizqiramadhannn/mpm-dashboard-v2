@@ -5,6 +5,8 @@ import { getDb } from "../../db";
 import { employees, employeeSalaryPayments, invoiceDocuments } from "../../db/schema";
 import { recordActivityLog, requireSuperadmin } from "../auth";
 
+const MAX_OMSET_BONUS = 1_000_000;
+
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -115,11 +117,15 @@ export async function getInvoiceOmsetForSalaryMonth(salaryMonth: string) {
   return rows.reduce((sum, row) => sum + row.totalAmount, 0);
 }
 
+export function calculateOmsetBonus(omset: number) {
+  return Math.min(MAX_OMSET_BONUS, Math.round((omset * 0.01) / 4));
+}
+
 export async function getBonusOmsetForSalaryMonth(salaryMonth: string) {
   const omset = await getInvoiceOmsetForSalaryMonth(salaryMonth);
 
   return {
-    bonusOmset: Math.round((omset * 0.01) / 4),
+    bonusOmset: calculateOmsetBonus(omset),
     omset,
   };
 }
@@ -295,7 +301,7 @@ export async function createSalaryPaymentAction(formData: FormData) {
   const paymentDate = requiredString(formData, "paymentDate");
   const baseSalary = parseAmount(formData, "baseSalary");
   const salesAmount = await getInvoiceOmsetForSalaryMonth(salaryMonth);
-  const commissionAmount = Math.round((salesAmount * 0.01) / 4);
+  const commissionAmount = calculateOmsetBonus(salesAmount);
   const additionalBonus = parseAmount(formData, "additionalBonus");
   const deduction = parseAmount(formData, "deduction");
   const totalPaid = Math.max(
