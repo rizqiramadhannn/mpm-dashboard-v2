@@ -8,6 +8,7 @@ import {
 } from "../components/Pagination";
 import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
+import { SgaExcelDownload } from "./SgaExcelDownload";
 
 export const dynamic = "force-dynamic";
 
@@ -193,6 +194,8 @@ export default async function SgaPage({
             title="Tujuan Transaksi"
           />
         </div>
+
+        <SgaExcelDownload rows={data.doneRows} />
 
         <div className="customer-table-wrap">
           <table className="customer-table sga-table" data-sortable-table>
