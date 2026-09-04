@@ -146,6 +146,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             PAYMENT REQUEST
           </Link>
 
+          <Link
+            className={`nav-link ${isActive(pathname, "/sga") ? "active" : ""}`}
+            href="/sga"
+          >
+            SGA
+          </Link>
+
           <div className="nav-group">
             <div className={`nav-group-label ${employeeActive ? "active" : ""}`}>
               EMPLOYEE
