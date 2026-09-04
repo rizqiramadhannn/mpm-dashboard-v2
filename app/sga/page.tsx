@@ -1,5 +1,11 @@
 import { desc } from "drizzle-orm";
 import { AppShell } from "../components/AppShell";
+import {
+  DEFAULT_PAGE_SIZE,
+  getCurrentPage,
+  paginateRows,
+  Pagination,
+} from "../components/Pagination";
 import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
 
@@ -133,8 +139,14 @@ async function getSgaData() {
   };
 }
 
-export default async function SgaPage() {
+export default async function SgaPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = (await searchParams) ?? {};
   const data = await getSgaData();
+  const { pageRows, safePage } = paginateRows(data.doneRows, getCurrentPage(params));
 
   return (
     <AppShell>
@@ -197,10 +209,10 @@ export default async function SgaPage() {
               </tr>
             </thead>
             <tbody>
-              {data.doneRows.length > 0 ? (
-                data.doneRows.map((row, index) => (
+              {pageRows.length > 0 ? (
+                pageRows.map((row, index) => (
                   <tr key={row.id}>
-                    <td>{index + 1}</td>
+                    <td>{(safePage - 1) * DEFAULT_PAGE_SIZE + index + 1}</td>
                     <td>{formatDate(row.requestDate)}</td>
                     <td>{row.requestedByUsername || "-"}</td>
                     <td>{row.sourceFund || "-"}</td>
@@ -217,6 +229,11 @@ export default async function SgaPage() {
               )}
             </tbody>
           </table>
+          <Pagination
+            currentPage={safePage}
+            params={params}
+            totalItems={data.doneRows.length}
+          />
         </div>
       </section>
     </AppShell>
