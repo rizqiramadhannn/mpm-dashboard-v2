@@ -23,6 +23,7 @@ export const customers = sqliteTable(
     defaultPaymentTerm: text("default_payment_term").notNull().default("CBD"),
     monthlyCreditLimit: integer("credit_limit").notNull().default(15_000_000),
     sphCreditLimit: integer("sph_credit_limit").notNull().default(0),
+    priceCalculation: real("price_calculation").notNull().default(1.3),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

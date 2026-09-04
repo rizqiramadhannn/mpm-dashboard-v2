@@ -41,6 +41,7 @@ export default async function CustomerListPage({
         customer.detailLine3,
         customer.contactName,
         customer.phone,
+        customer.priceCalculation,
       ].some((value) => textMatches(value, query));
     const matchesProvince = !provinceFilter || customer.detailLine2 === provinceFilter;
 

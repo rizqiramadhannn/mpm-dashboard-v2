@@ -14,6 +14,7 @@ type CustomerRow = {
   defaultPaymentTerm: string;
   monthlyCreditLimit: number;
   sphCreditLimit: number;
+  priceCalculation: number;
 };
 
 type CustomerFormProps = {
@@ -31,6 +32,13 @@ function formatMoney(value: number) {
   return `Rp ${new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 0,
   }).format(value)}`;
+}
+
+function formatDecimal(value: number) {
+  return new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 1,
+  }).format(value);
 }
 
 function whatsappUrl(phone: string) {
@@ -208,6 +216,19 @@ export function CustomerForm({
             />
           </label>
 
+          <label>
+            <span>Perhitungan Harga</span>
+            <input
+              name="priceCalculation"
+              required
+              defaultValue={customer?.priceCalculation ?? 1.3}
+              inputMode="decimal"
+              step="0.1"
+              type="number"
+              placeholder="1.3"
+            />
+          </label>
+
           <button type="submit">{customer ? "Simpan customer" : "Buat customer"}</button>
         </ConfirmForm>
       ) : null}
@@ -229,6 +250,7 @@ export function CustomerForm({
                   <th>Payment Term</th>
                   <th>Limit Bulanan</th>
                   <th>Limit Per SPH</th>
+                  <th>Perhitungan Harga</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -250,6 +272,7 @@ export function CustomerForm({
                           ? formatMoney(customer.sphCreditLimit)
                           : "Tidak ada limit"}
                       </td>
+                      <td>{formatDecimal(customer.priceCalculation)}</td>
                       <td>
                         <div className="table-actions">
                           {whatsappUrl(customer.phone) ? (
@@ -271,7 +294,7 @@ export function CustomerForm({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={11}>Tidak ada customer sesuai filter.</td>
+                    <td colSpan={12}>Tidak ada customer sesuai filter.</td>
                   </tr>
                 )}
               </tbody>

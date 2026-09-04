@@ -197,6 +197,13 @@
       "when": 1788115200000,
       "tag": "0031_sph_pdf_date",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1788440815365,
+      "tag": "0032_customer_price_calculation",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import { customers } from "../../db/schema";
 import { recordActivityLog, requireUser } from "../auth";
 
 export const defaultMonthlyCreditLimit = 15_000_000;
+export const defaultPriceCalculation = 1.3;
 
 export const seededCustomers = [
   {
@@ -19,6 +20,7 @@ export const seededCustomers = [
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
+    priceCalculation: defaultPriceCalculation,
   },
   {
     code: "RDP",
@@ -31,6 +33,7 @@ export const seededCustomers = [
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
+    priceCalculation: defaultPriceCalculation,
   },
   {
     code: "AJB",
@@ -43,6 +46,7 @@ export const seededCustomers = [
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
+    priceCalculation: defaultPriceCalculation,
   },
   {
     code: "MPA",
@@ -55,6 +59,7 @@ export const seededCustomers = [
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
+    priceCalculation: defaultPriceCalculation,
   },
   {
     code: "MIM",
@@ -67,6 +72,7 @@ export const seededCustomers = [
     defaultPaymentTerm: "CBD",
     monthlyCreditLimit: defaultMonthlyCreditLimit,
     sphCreditLimit: 0,
+    priceCalculation: defaultPriceCalculation,
   },
 ];
 
@@ -91,6 +97,18 @@ function parseRupiah(formData: FormData, key: string, fallback = 0) {
   const amount = raw ? Number(raw) : fallback;
 
   if (!Number.isInteger(amount) || amount < 0) {
+    throw new Error(`${key} harus berupa angka valid.`);
+  }
+
+  return amount;
+}
+
+function parseDecimal(formData: FormData, key: string, fallback = 0) {
+  const value = formData.get(key);
+  const raw = typeof value === "string" ? value.trim().replace(",", ".") : "";
+  const amount = raw ? Number(raw) : fallback;
+
+  if (!Number.isFinite(amount) || amount < 0) {
     throw new Error(`${key} harus berupa angka valid.`);
   }
 
@@ -147,6 +165,11 @@ function customerValuesFromForm(formData: FormData) {
       defaultMonthlyCreditLimit
     ),
     sphCreditLimit: parseRupiah(formData, "sphCreditLimit"),
+    priceCalculation: parseDecimal(
+      formData,
+      "priceCalculation",
+      defaultPriceCalculation
+    ),
   };
 }
 
@@ -183,6 +206,7 @@ export async function listCustomers() {
       defaultPaymentTerm: customers.defaultPaymentTerm,
       monthlyCreditLimit: customers.monthlyCreditLimit,
       sphCreditLimit: customers.sphCreditLimit,
+      priceCalculation: customers.priceCalculation,
     })
     .from(customers)
     .orderBy(asc(customers.name));
@@ -211,6 +235,7 @@ export async function getCustomer(id: string | number) {
       defaultPaymentTerm: customers.defaultPaymentTerm,
       monthlyCreditLimit: customers.monthlyCreditLimit,
       sphCreditLimit: customers.sphCreditLimit,
+      priceCalculation: customers.priceCalculation,
     })
     .from(customers)
     .where(eq(customers.id, customerId))
