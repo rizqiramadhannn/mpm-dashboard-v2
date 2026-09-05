@@ -204,6 +204,13 @@
       "when": 1788440815365,
       "tag": "0032_customer_price_calculation",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1788590603442,
+      "tag": "0033_payment_request_category",
+      "breakpoints": true
     }
   ]
 }

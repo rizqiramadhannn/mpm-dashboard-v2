@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { ConfirmForm } from "../components/ConfirmForm";
+import { PAYMENT_REQUEST_CATEGORIES } from "./categories";
 
 type PaymentRequestRow = {
   amount: number;
+  category: string;
   description: string;
   destinationAccount: string;
   id: string;
@@ -130,6 +132,7 @@ export function PaymentRequestTable({
             <th>Sumber Dana</th>
             <th>Nominal</th>
             <th>Rek Tujuan</th>
+            <th>Kategori</th>
             <th>Deskripsi</th>
             <th>Tujuan Transaksi</th>
             <th>Status</th>
@@ -198,6 +201,24 @@ export function PaymentRequestTable({
                       />
                     ) : (
                       row.destinationAccount
+                    )}
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <select
+                        aria-label={`Kategori ${row.description}`}
+                        className="inline-status-input"
+                        defaultValue={row.category}
+                        form={formId}
+                        name="category"
+                        required
+                      >
+                        {PAYMENT_REQUEST_CATEGORIES.map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      row.category
                     )}
                   </td>
                   <td>
@@ -303,7 +324,7 @@ export function PaymentRequestTable({
             })
           ) : (
             <tr>
-              <td colSpan={10}>Belum ada payment request sesuai filter.</td>
+              <td colSpan={11}>Belum ada payment request sesuai filter.</td>
             </tr>
           )}
         </tbody>

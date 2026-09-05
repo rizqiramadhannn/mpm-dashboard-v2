@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
 import { recordActivityLog, requireSuperadmin, requireUser } from "../auth";
+import { isPaymentRequestCategory } from "./categories";
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -13,6 +14,16 @@ function requiredString(formData: FormData, key: string) {
 
   if (!value) {
     throw new Error(`${key} wajib diisi.`);
+  }
+
+  return value;
+}
+
+function requiredCategory(formData: FormData) {
+  const value = requiredString(formData, "category");
+
+  if (!isPaymentRequestCategory(value)) {
+    throw new Error("Kategori payment request tidak valid.");
   }
 
   return value;
@@ -44,6 +55,7 @@ export async function listPaymentRequests(order: "asc" | "desc" = "desc") {
   return db
     .select({
       amount: paymentRequests.amount,
+      category: paymentRequests.category,
       createdAt: paymentRequests.createdAt,
       description: paymentRequests.description,
       destinationAccount: paymentRequests.destinationAccount,
@@ -71,6 +83,7 @@ export async function createPaymentRequestAction(formData: FormData) {
 
   const [inserted] = await db.insert(paymentRequests).values({
     amount: parseAmount(formData.get("amount")),
+    category: requiredCategory(formData),
     description: requiredString(formData, "description"),
     destinationAccount: requiredString(formData, "destinationAccount"),
     requestDate: asString(formData.get("requestDate")) || todayKey(),
@@ -86,6 +99,7 @@ export async function createPaymentRequestAction(formData: FormData) {
     actor: user,
     details: {
       amount: parseAmount(formData.get("amount")),
+      category: requiredCategory(formData),
       description: requiredString(formData, "description"),
       paymentRequestId: inserted.id,
       sourceFund: requiredString(formData, "sourceFund"),
@@ -108,6 +122,7 @@ export async function updatePaymentRequestAction(formData: FormData) {
     .update(paymentRequests)
     .set({
       amount: parseAmount(formData.get("amount")),
+      category: requiredCategory(formData),
       description: requiredString(formData, "description"),
       destinationAccount: requiredString(formData, "destinationAccount"),
       requestDate: requiredString(formData, "requestDate"),
@@ -123,6 +138,7 @@ export async function updatePaymentRequestAction(formData: FormData) {
     actor: user,
     details: {
       amount: parseAmount(formData.get("amount")),
+      category: requiredCategory(formData),
       description: requiredString(formData, "description"),
       paymentRequestId: id,
       sourceFund: requiredString(formData, "sourceFund"),

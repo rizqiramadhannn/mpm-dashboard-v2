@@ -44,6 +44,7 @@ function buildWorkbookXml(
       cell(item.sourceFund, "Center"),
       cell(item.amount, "Money", "Number"),
       cell(item.destinationAccount, "Text"),
+      cell(item.category, "Text"),
       cell(item.description, "Text"),
       cell(item.transactionPurpose, "Text"),
       cell(item.status, "Text"),
@@ -122,6 +123,7 @@ function buildWorkbookXml(
       <Column ss:Width="118"/>
       <Column ss:Width="100"/>
       <Column ss:Width="160"/>
+      <Column ss:Width="150"/>
       <Column ss:Width="190"/>
       <Column ss:Width="210"/>
       <Column ss:Width="100"/>
@@ -135,6 +137,7 @@ function buildWorkbookXml(
         cell("Sumber Dana", "Header"),
         cell("Nominal", "Header"),
         cell("Rek Tujuan", "Header"),
+        cell("Kategori", "Header"),
         cell("Deskripsi", "Header"),
         cell("Tujuan Transaksi", "Header"),
         cell("Status", "Header"),

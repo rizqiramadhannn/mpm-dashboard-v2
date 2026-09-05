@@ -10,6 +10,7 @@ import {
   listPaymentRequests,
   updatePaymentRequestAction,
 } from "./data";
+import { PAYMENT_REQUEST_CATEGORIES } from "./categories";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default async function PaymentRequestPage({
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const sourceFilter = getSearchParam(params, "source");
   const statusFilter = getSearchParam(params, "status");
+  const categoryFilter = getSearchParam(params, "category");
   const [currentUser, rows] = await Promise.all([
     requireUser("/payment-request"),
     listPaymentRequests(),
@@ -59,6 +61,7 @@ export default async function PaymentRequestPage({
       !query ||
       [
         row.sourceFund,
+        row.category,
         row.destinationAccount,
         row.description,
         row.requestedByUsername,
@@ -67,8 +70,9 @@ export default async function PaymentRequestPage({
       ].some((value) => textMatches(value, query));
     const matchesSource = !sourceFilter || row.sourceFund === sourceFilter;
     const matchesStatus = !statusFilter || row.status === statusFilter;
+    const matchesCategory = !categoryFilter || row.category === categoryFilter;
 
-    return matchesQuery && matchesSource && matchesStatus;
+    return matchesQuery && matchesSource && matchesStatus && matchesCategory;
   });
   const { pageRows, safePage } = paginateRows(filteredRows, getCurrentPage(params));
 
@@ -107,6 +111,15 @@ export default async function PaymentRequestPage({
             <input name="destinationAccount" required placeholder="Nama / bank tujuan" />
           </label>
           <label>
+            <span>Kategori</span>
+            <select name="category" required defaultValue="">
+              <option disabled value="">Pilih kategori...</option>
+              {PAYMENT_REQUEST_CATEGORIES.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Deskripsi</span>
             <input name="description" required placeholder="Bagi Hasil Net Profit 50%" />
           </label>
@@ -138,6 +151,15 @@ export default async function PaymentRequestPage({
                 <option key={source} value={source}>
                   {source}
                 </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Kategori</span>
+            <select name="category" defaultValue={categoryFilter}>
+              <option value="">Semua Kategori</option>
+              {PAYMENT_REQUEST_CATEGORIES.map((category) => (
+                <option key={category} value={category}>{category}</option>
               ))}
             </select>
           </label>

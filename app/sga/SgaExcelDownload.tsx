@@ -4,6 +4,7 @@ import { downloadExcelWorkbook } from "../components/excelExport";
 
 export type SgaExportRow = {
   amount: number;
+  category: string;
   description: string;
   destinationAccount: string;
   id: string;
@@ -93,8 +94,8 @@ export function SgaExcelDownload({ rows }: { rows: SgaExportRow[] }) {
       ...buildBreakdown(rows, "Sumber Dana", (row) => row.sourceFund, totalAmount),
       ...buildBreakdown(
         rows,
-        "Tujuan Transaksi",
-        (row) => row.transactionPurpose,
+        "Kategori",
+        (row) => row.category,
         totalAmount
       ),
       ...buildBreakdown(
@@ -150,6 +151,7 @@ export function SgaExcelDownload({ rows }: { rows: SgaExportRow[] }) {
             { header: "Sumber Dana", value: (row: SgaExportRow) => row.sourceFund || "-", width: 24 },
             { format: "currency", header: "Nominal", value: (row: SgaExportRow) => row.amount, width: 20 },
             { header: "Rekening Tujuan", value: (row: SgaExportRow) => row.destinationAccount || "-", width: 28 },
+            { header: "Kategori", value: (row: SgaExportRow) => row.category || "Lain-lain", width: 28 },
             { header: "Deskripsi", value: (row: SgaExportRow) => row.description || "-", width: 42 },
             { header: "Tujuan Transaksi", value: (row: SgaExportRow) => row.transactionPurpose || "-", width: 32 },
             { header: "Status", value: () => "DONE", width: 12 },

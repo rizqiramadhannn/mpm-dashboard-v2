@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 type SgaRow = {
   amount: number;
+  category: string;
   description: string;
   destinationAccount: string;
   id: string;
@@ -95,6 +96,7 @@ async function getSgaData() {
   const rows = await db
     .select({
       amount: paymentRequests.amount,
+      category: paymentRequests.category,
       description: paymentRequests.description,
       destinationAccount: paymentRequests.destinationAccount,
       id: paymentRequests.id,
@@ -110,14 +112,14 @@ async function getSgaData() {
   const doneRows: SgaRow[] = rows.filter((row) => isDoneStatus(row.status));
   const totalAmount = doneRows.reduce((sum, row) => sum + row.amount, 0);
   const sourceTotals = new Map<string, number>();
-  const purposeTotals = new Map<string, number>();
+  const categoryTotals = new Map<string, number>();
   const monthlyTotals = new Map<string, number>();
 
   for (const row of doneRows) {
     sourceTotals.set(row.sourceFund, (sourceTotals.get(row.sourceFund) ?? 0) + row.amount);
-    purposeTotals.set(
-      row.transactionPurpose,
-      (purposeTotals.get(row.transactionPurpose) ?? 0) + row.amount
+    categoryTotals.set(
+      row.category,
+      (categoryTotals.get(row.category) ?? 0) + row.amount
     );
 
     const key = row.requestDate.slice(0, 7);
@@ -136,7 +138,7 @@ async function getSgaData() {
     sourceRankings: rankRows(sourceTotals),
     totalAmount,
     totalRequests: doneRows.length,
-    transactionRankings: rankRows(purposeTotals),
+    categoryRankings: rankRows(categoryTotals),
   };
 }
 
@@ -190,8 +192,8 @@ export default async function SgaPage({
           />
           <RankingCard
             emptyText="Belum ada payment request DONE."
-            items={data.transactionRankings}
-            title="Tujuan Transaksi"
+            items={data.categoryRankings}
+            title="Kategori"
           />
         </div>
 
@@ -207,6 +209,7 @@ export default async function SgaPage({
                 <th>Sumber Dana</th>
                 <th>Nominal</th>
                 <th>Rek Tujuan</th>
+                <th>Kategori</th>
                 <th>Deskripsi</th>
                 <th>Tujuan Transaksi</th>
               </tr>
@@ -221,13 +224,14 @@ export default async function SgaPage({
                     <td>{row.sourceFund || "-"}</td>
                     <td className="numeric-cell">{formatMoney(row.amount)}</td>
                     <td>{row.destinationAccount || "-"}</td>
+                    <td>{row.category || "Lain-lain"}</td>
                     <td>{row.description || "-"}</td>
                     <td>{row.transactionPurpose || "-"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8}>Belum ada payment request dengan status DONE.</td>
+                  <td colSpan={9}>Belum ada payment request dengan status DONE.</td>
                 </tr>
               )}
             </tbody>

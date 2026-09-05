@@ -574,6 +574,7 @@ export const paymentRequests = sqliteTable(
     sourceFund: text("source_fund").notNull().default(""),
     amount: integer("amount").notNull().default(0),
     destinationAccount: text("destination_account").notNull().default(""),
+    category: text("category").notNull().default("Lain-lain"),
     description: text("description").notNull().default(""),
     transactionPurpose: text("transaction_purpose").notNull().default(""),
     status: text("status").notNull().default(""),
@@ -585,6 +586,7 @@ export const paymentRequests = sqliteTable(
       table.requestDate
     ),
     sourceFundIdx: index("payment_requests_source_fund_idx").on(table.sourceFund),
+    categoryIdx: index("payment_requests_category_idx").on(table.category),
     statusIdx: index("payment_requests_status_idx").on(table.status),
     requestedByIdx: index("payment_requests_requested_by_idx").on(
       table.requestedByUsername
