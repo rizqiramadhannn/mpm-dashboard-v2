@@ -11,6 +11,7 @@ import {
   updatePaymentRequestAction,
 } from "./data";
 import { PAYMENT_REQUEST_CATEGORIES } from "./categories";
+import { PAYMENT_REQUEST_SOURCES } from "./sources";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,12 @@ export default async function PaymentRequestPage({
           </label>
           <label>
             <span>Sumber Dana</span>
-            <input name="sourceFund" required placeholder="BCA MPM" />
+            <select name="sourceFund" required defaultValue="">
+              <option disabled value="">Pilih sumber dana...</option>
+              {PAYMENT_REQUEST_SOURCES.map((source) => (
+                <option key={source} value={source}>{source}</option>
+              ))}
+            </select>
           </label>
           <label>
             <span>Nominal</span>

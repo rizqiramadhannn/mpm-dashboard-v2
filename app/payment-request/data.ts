@@ -4,6 +4,7 @@ import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
 import { recordActivityLog, requireSuperadmin, requireUser } from "../auth";
 import { isPaymentRequestCategory } from "./categories";
+import { isPaymentRequestSource } from "./sources";
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -24,6 +25,16 @@ function requiredCategory(formData: FormData) {
 
   if (!isPaymentRequestCategory(value)) {
     throw new Error("Kategori payment request tidak valid.");
+  }
+
+  return value;
+}
+
+function requiredSourceFund(formData: FormData) {
+  const value = requiredString(formData, "sourceFund");
+
+  if (!isPaymentRequestSource(value)) {
+    throw new Error("Sumber dana payment request tidak valid.");
   }
 
   return value;
@@ -89,7 +100,7 @@ export async function createPaymentRequestAction(formData: FormData) {
     requestDate: asString(formData.get("requestDate")) || todayKey(),
     requestedByUserId: user.id,
     requestedByUsername: user.username,
-    sourceFund: requiredString(formData, "sourceFund"),
+    sourceFund: requiredSourceFund(formData),
     status: asString(formData.get("status")),
     transactionPurpose: requiredString(formData, "transactionPurpose"),
   }).returning({ id: paymentRequests.id });
@@ -102,7 +113,7 @@ export async function createPaymentRequestAction(formData: FormData) {
       category: requiredCategory(formData),
       description: requiredString(formData, "description"),
       paymentRequestId: inserted.id,
-      sourceFund: requiredString(formData, "sourceFund"),
+      sourceFund: requiredSourceFund(formData),
     },
     targetUsername: user.username,
     targetUserId: user.id,
@@ -126,7 +137,7 @@ export async function updatePaymentRequestAction(formData: FormData) {
       description: requiredString(formData, "description"),
       destinationAccount: requiredString(formData, "destinationAccount"),
       requestDate: requiredString(formData, "requestDate"),
-      sourceFund: requiredString(formData, "sourceFund"),
+      sourceFund: requiredSourceFund(formData),
       status: asString(formData.get("status")),
       transactionPurpose: requiredString(formData, "transactionPurpose"),
       updatedAt: new Date().toISOString(),
@@ -141,7 +152,7 @@ export async function updatePaymentRequestAction(formData: FormData) {
       category: requiredCategory(formData),
       description: requiredString(formData, "description"),
       paymentRequestId: id,
-      sourceFund: requiredString(formData, "sourceFund"),
+      sourceFund: requiredSourceFund(formData),
     },
     targetUserId: user.id,
     targetUsername: user.username,

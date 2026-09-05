@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ConfirmForm } from "../components/ConfirmForm";
 import { PAYMENT_REQUEST_CATEGORIES } from "./categories";
+import { isPaymentRequestSource, PAYMENT_REQUEST_SOURCES } from "./sources";
 
 type PaymentRequestRow = {
   amount: number;
@@ -165,13 +166,19 @@ export function PaymentRequestTable({
                   <td>{row.requestedByUsername || "-"}</td>
                   <td>
                     {isEditing ? (
-                      <input
-                        className="inline-text-input"
+                      <select
+                        aria-label={`Sumber dana ${row.description}`}
+                        className="inline-status-input"
+                        defaultValue={isPaymentRequestSource(row.sourceFund) ? row.sourceFund : ""}
                         form={formId}
                         name="sourceFund"
                         required
-                        defaultValue={row.sourceFund}
-                      />
+                      >
+                        <option disabled value="">Pilih sumber dana...</option>
+                        {PAYMENT_REQUEST_SOURCES.map((source) => (
+                          <option key={source} value={source}>{source}</option>
+                        ))}
+                      </select>
                     ) : (
                       row.sourceFund
                     )}
