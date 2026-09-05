@@ -9,6 +9,7 @@ import {
 import { getDb } from "../../db";
 import { paymentRequests } from "../../db/schema";
 import { SgaExcelDownload } from "./SgaExcelDownload";
+import { isInternalJagoTransfer } from "./rules";
 
 export const dynamic = "force-dynamic";
 
@@ -109,7 +110,11 @@ async function getSgaData() {
     .from(paymentRequests)
     .orderBy(desc(paymentRequests.requestDate), desc(paymentRequests.createdAt));
 
-  const doneRows: SgaRow[] = rows.filter((row) => isDoneStatus(row.status));
+  const doneRows: SgaRow[] = rows.filter(
+    (row) =>
+      isDoneStatus(row.status) &&
+      !isInternalJagoTransfer(row.sourceFund, row.destinationAccount)
+  );
   const totalAmount = doneRows.reduce((sum, row) => sum + row.amount, 0);
   const sourceTotals = new Map<string, number>();
   const categoryTotals = new Map<string, number>();
@@ -159,7 +164,7 @@ export default async function SgaPage({
             <p className="page-kicker">Finance</p>
             <h1>SGA</h1>
           </div>
-          <div className="dashboard-period">Status DONE</div>
+          <div className="dashboard-period">DONE · Non-transfer internal</div>
         </div>
 
         <div className="stats-grid">

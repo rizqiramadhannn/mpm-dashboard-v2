@@ -105,7 +105,7 @@ export function SgaExcelDownload({ rows }: { rows: SgaExportRow[] }) {
         totalAmount
       ),
     ];
-    const subtitle = `Basis laporan: payment request berstatus DONE | Periode: ${period} | Dibuat: ${new Intl.DateTimeFormat(
+    const subtitle = `Basis laporan: payment request berstatus DONE, tidak termasuk transfer internal BCA MPM ke JAGO | Periode: ${period} | Dibuat: ${new Intl.DateTimeFormat(
       "id-ID",
       { dateStyle: "long", timeStyle: "short" }
     ).format(new Date())}`;
