@@ -211,6 +211,13 @@
       "when": 1788590603442,
       "tag": "0033_payment_request_category",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1788595000000,
+      "tag": "0034_normalize_payment_request_sources",
+      "breakpoints": true
     }
   ]
 }
