@@ -218,6 +218,13 @@
       "when": 1788595000000,
       "tag": "0034_normalize_payment_request_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1788885623268,
+      "tag": "0035_finance_records",
+      "breakpoints": true
     }
   ]
 }

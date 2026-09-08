@@ -594,6 +594,41 @@ export const paymentRequests = sqliteTable(
   })
 );
 
+export const financeRecords = sqliteTable(
+  "finance_records",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    sourceKey: text("source_key").notNull(),
+    sourceSpreadsheetId: text("source_spreadsheet_id").notNull(),
+    sourceSheet: text("source_sheet").notNull(),
+    sourceRow: integer("source_row").notNull(),
+    transactionDate: text("transaction_date").notNull(),
+    transactionTime: text("transaction_time").notNull().default(""),
+    sourceDocument: text("source_document").notNull().default(""),
+    description: text("description").notNull().default(""),
+    counterparty: text("counterparty").notNull().default(""),
+    sourceCategory: text("source_category").notNull().default(""),
+    direction: text("direction", { enum: ["income", "outcome"] }).notNull(),
+    financeCategory: text("finance_category").notNull(),
+    amount: integer("amount").notNull(),
+    sourceStatus: text("source_status").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    importBatchId: text("import_batch_id").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    sourceKeyIdx: uniqueIndex("finance_records_source_key_idx").on(table.sourceKey),
+    dateIdx: index("finance_records_date_idx").on(table.transactionDate),
+    directionIdx: index("finance_records_direction_idx").on(table.direction),
+    categoryIdx: index("finance_records_category_idx").on(table.financeCategory),
+    sourcePeriodIdx: index("finance_records_source_period_idx").on(
+      table.sourceSpreadsheetId,
+      table.transactionDate
+    ),
+  })
+);
+
 export const assets = sqliteTable(
   "assets",
   {

@@ -147,10 +147,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <Link
-            className={`nav-link ${isActive(pathname, "/sga") ? "active" : ""}`}
-            href="/sga"
+            className={`nav-link ${isActive(pathname, "/finance") ? "active" : ""}`}
+            href="/finance"
           >
-            SGA
+            FINANCE
           </Link>
 
           <div className="nav-group">

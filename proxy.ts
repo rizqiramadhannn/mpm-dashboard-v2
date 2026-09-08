@@ -59,7 +59,7 @@ export const config = {
 };
 
 function isPublicPath(pathname: string) {
-  return publicPaths.has(pathname);
+  return publicPaths.has(pathname) || pathname === "/api/finance/sync";
 }
 
 function isApiPath(pathname: string) {
