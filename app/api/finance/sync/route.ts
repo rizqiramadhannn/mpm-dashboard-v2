@@ -3,7 +3,7 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../../db";
 import { randomId } from "../../../../db/id";
-import { financeRecords } from "../../../../db/schema";
+import { financeRecords, financeSyncCredentials } from "../../../../db/schema";
 import { FINANCE_CATEGORIES } from "../../../finance/constants";
 
 type IncomingRecord = {
@@ -16,7 +16,7 @@ type IncomingRecord = {
 type SyncBody = { spreadsheetId: string; periodStart: string; periodEnd: string; records: IncomingRecord[] };
 
 export async function POST(request: Request) {
-  if (!isAuthorized(request.headers.get("authorization"))) {
+  if (!(await isAuthorized(request.headers.get("authorization")))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   let body: SyncBody;
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     periodStart: body.periodStart, periodEnd: body.periodEnd });
 }
 
-function isAuthorized(header: string | null) {
+async function isAuthorized(header: string | null) {
   const databaseToken = process.env.TURSO_AUTH_TOKEN ?? process.env.TURSO_DATABASE_TURSO_AUTH_TOKEN;
   const supplied = header?.startsWith("Bearer ") ? header.slice(7) : "";
   if (!supplied) return false;
@@ -59,10 +59,19 @@ function isAuthorized(header: string | null) {
     process.env.FINANCE_SYNC_TOKEN,
     databaseToken ? deriveSyncToken(databaseToken) : "",
   ].filter(Boolean) as string[];
-  return candidates.some((expected) => {
+  if (candidates.some((expected) => {
     const a = Buffer.from(expected); const b = Buffer.from(supplied);
     return a.length === b.length && timingSafeEqual(a, b);
+  })) return true;
+
+  const tokenHash = createHash("sha256").update(supplied).digest("hex");
+  const db = await getDb();
+  const credential = await db.query.financeSyncCredentials.findFirst({
+    where: eq(financeSyncCredentials.tokenHash, tokenHash),
   });
+  if (!credential) return false;
+  await db.update(financeSyncCredentials).set({ lastUsedAt: new Date().toISOString() }).where(eq(financeSyncCredentials.id, credential.id));
+  return true;
 }
 
 function deriveSyncToken(databaseToken: string) {

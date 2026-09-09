@@ -225,6 +225,13 @@
       "when": 1788885623268,
       "tag": "0035_finance_records",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1788915890275,
+      "tag": "0036_finance_sync_credentials",
+      "breakpoints": true
     }
   ]
 }

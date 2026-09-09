@@ -629,6 +629,16 @@ export const financeRecords = sqliteTable(
   })
 );
 
+export const financeSyncCredentials = sqliteTable("finance_sync_credentials", {
+  id: text("id").primaryKey().$defaultFn(randomId),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastUsedAt: text("last_used_at"),
+}, (table) => ({
+  tokenHashIdx: uniqueIndex("finance_sync_credentials_token_hash_idx").on(table.tokenHash),
+}));
+
 export const assets = sqliteTable(
   "assets",
   {
