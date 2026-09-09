@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../../db";
@@ -52,11 +52,16 @@ export async function POST(request: Request) {
 }
 
 function isAuthorized(header: string | null) {
-  const expected = process.env.FINANCE_SYNC_TOKEN;
+  const databaseToken = process.env.TURSO_AUTH_TOKEN ?? process.env.TURSO_DATABASE_TURSO_AUTH_TOKEN;
+  const expected = process.env.FINANCE_SYNC_TOKEN ?? (databaseToken ? deriveSyncToken(databaseToken) : "");
   const supplied = header?.startsWith("Bearer ") ? header.slice(7) : "";
   if (!expected || !supplied) return false;
   const a = Buffer.from(expected); const b = Buffer.from(supplied);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function deriveSyncToken(databaseToken: string) {
+  return createHash("sha256").update(`mpm-finance-sync:v1:${databaseToken}`).digest("hex");
 }
 
 function validateBody(body: SyncBody) {
