@@ -53,11 +53,16 @@ export async function POST(request: Request) {
 
 function isAuthorized(header: string | null) {
   const databaseToken = process.env.TURSO_AUTH_TOKEN ?? process.env.TURSO_DATABASE_TURSO_AUTH_TOKEN;
-  const expected = process.env.FINANCE_SYNC_TOKEN ?? (databaseToken ? deriveSyncToken(databaseToken) : "");
   const supplied = header?.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!expected || !supplied) return false;
-  const a = Buffer.from(expected); const b = Buffer.from(supplied);
-  return a.length === b.length && timingSafeEqual(a, b);
+  if (!supplied) return false;
+  const candidates = [
+    process.env.FINANCE_SYNC_TOKEN,
+    databaseToken ? deriveSyncToken(databaseToken) : "",
+  ].filter(Boolean) as string[];
+  return candidates.some((expected) => {
+    const a = Buffer.from(expected); const b = Buffer.from(supplied);
+    return a.length === b.length && timingSafeEqual(a, b);
+  });
 }
 
 function deriveSyncToken(databaseToken: string) {
