@@ -173,7 +173,8 @@ function LedgerView({ allRows, category, rows, currentPage, params, query, sourc
 
 function single(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] || "" : value || ""; }
 function normalizeView(value: string): FinanceTab { return FINANCE_TABS.some((tab) => tab.key === value) ? value as FinanceTab : "summary"; }
-function normalizeMonth(value: string) { return /^\d{4}-\d{2}$/.test(value) ? value : ""; }
+function normalizeMonth(value: string) { return /^\d{4}-\d{2}$/.test(value) ? value : previousCalendarMonth(); }
+function previousCalendarMonth() { const date = new Date(); return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, 1)).toISOString().slice(0, 7); }
 function sum(rows: Array<{ amount: number }>) { return rows.reduce((total, row) => total + row.amount, 0); }
 function ranked(rows: Array<typeof financeRecords.$inferSelect>, label: (row: typeof financeRecords.$inferSelect) => string) {
   return Array.from(rows.reduce((map, row) => {
