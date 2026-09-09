@@ -639,6 +639,14 @@ export const financeSyncCredentials = sqliteTable("finance_sync_credentials", {
   tokenHashIdx: uniqueIndex("finance_sync_credentials_token_hash_idx").on(table.tokenHash),
 }));
 
+export const financeCategoryOverrides = sqliteTable("finance_category_overrides", {
+  sourceKey: text("source_key").primaryKey(),
+  financeCategory: text("finance_category").notNull(),
+  direction: text("direction", { enum: ["income", "outcome"] }).notNull(),
+  updatedByUsername: text("updated_by_username").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const assets = sqliteTable(
   "assets",
   {

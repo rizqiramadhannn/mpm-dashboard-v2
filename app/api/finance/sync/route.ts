@@ -1,9 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../../db";
 import { randomId } from "../../../../db/id";
-import { financeRecords, financeSyncCredentials } from "../../../../db/schema";
+import { financeCategoryOverrides, financeRecords, financeSyncCredentials } from "../../../../db/schema";
 import { FINANCE_CATEGORIES } from "../../../finance/constants";
 
 type IncomingRecord = {
@@ -29,14 +29,26 @@ export async function POST(request: Request) {
   const db = await getDb();
   const batchId = randomId();
   const now = new Date().toISOString();
+  const overrides = new Map<string, typeof financeCategoryOverrides.$inferSelect>();
+  for (let offset = 0; offset < body.records.length; offset += 250) {
+    const keys = body.records.slice(offset, offset + 250).map((record) => record.sourceKey);
+    if (!keys.length) continue;
+    const rows = await db.select().from(financeCategoryOverrides).where(inArray(financeCategoryOverrides.sourceKey, keys));
+    rows.forEach((row) => overrides.set(row.sourceKey, row));
+  }
+  const records = body.records.map((record) => ({
+    ...record,
+    financeCategory: overrides.get(record.sourceKey)?.financeCategory || record.financeCategory,
+    direction: overrides.get(record.sourceKey)?.direction || record.direction,
+  }));
   await db.transaction(async (tx) => {
     await tx.delete(financeRecords).where(and(
       eq(financeRecords.sourceSpreadsheetId, body.spreadsheetId),
       gte(financeRecords.transactionDate, body.periodStart),
       lte(financeRecords.transactionDate, body.periodEnd)
     ));
-    for (let offset = 0; offset < body.records.length; offset += 250) {
-      await tx.insert(financeRecords).values(body.records.slice(offset, offset + 250).map((record) => ({
+    for (let offset = 0; offset < records.length; offset += 250) {
+      await tx.insert(financeRecords).values(records.slice(offset, offset + 250).map((record) => ({
         ...record, id: randomId(), amount: Math.round(record.amount), importBatchId: batchId,
         sourceSpreadsheetId: body.spreadsheetId, transactionTime: record.transactionTime || "",
         sourceDocument: record.sourceDocument || "", description: record.description || "",
@@ -45,9 +57,9 @@ export async function POST(request: Request) {
       })));
     }
   });
-  const income = body.records.filter((r) => r.direction === "income").reduce((s, r) => s + r.amount, 0);
-  const outcome = body.records.filter((r) => r.direction === "outcome").reduce((s, r) => s + r.amount, 0);
-  return NextResponse.json({ batchId, imported: body.records.length, income, outcome, net: income - outcome,
+  const income = records.filter((r) => r.direction === "income").reduce((s, r) => s + r.amount, 0);
+  const outcome = records.filter((r) => r.direction === "outcome").reduce((s, r) => s + r.amount, 0);
+  return NextResponse.json({ batchId, imported: records.length, income, outcome, net: income - outcome,
     periodStart: body.periodStart, periodEnd: body.periodEnd });
 }
 

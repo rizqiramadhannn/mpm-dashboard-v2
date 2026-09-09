@@ -5,8 +5,9 @@ import { AppShell } from "../components/AppShell";
 import { Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
 import { financeRecords } from "../../db/schema";
-import { FINANCE_TABS, FinanceTab, SGA_CATEGORIES } from "./constants";
+import { FINANCE_CATEGORIES, FINANCE_TABS, FinanceTab, SGA_CATEGORIES } from "./constants";
 import { FinanceExcelDownload } from "./FinanceExcelDownload";
+import { moveFinanceRecordAction } from "./data";
 
 const PAGE_SIZE = 25;
 
@@ -18,6 +19,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Sear
   const view = normalizeView(single(params.view));
   const month = normalizeMonth(single(params.month));
   const page = Math.max(1, Number.parseInt(single(params.page) || "1", 10) || 1);
+  const query = single(params.q).trim();
+  const source = single(params.source).trim();
+  const category = single(params.category).trim();
   const db = await getDb();
   const where = month
     ? and(gte(financeRecords.transactionDate, `${month}-01`), lte(financeRecords.transactionDate, `${month}-31`))
@@ -35,9 +39,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Sear
   const outcomeRows = allRows.filter((row) => row.direction === "outcome");
   const totalIncome = sum(incomeRows);
   const totalOutcome = sum(outcomeRows);
-  const filteredRows = view === "income" ? incomeRows : view === "stock"
+  const groupedRows = view === "income" ? incomeRows : view === "stock"
     ? outcomeRows.filter((row) => row.financeCategory === "Stock & Penjualan")
     : view === "sga" ? outcomeRows.filter((row) => SGA_CATEGORIES.includes(row.financeCategory as never)) : [];
+  const sources = [...new Set(groupedRows.map((row) => row.sourceSheet))].sort((a, b) => a.localeCompare(b));
+  const filteredRows = groupedRows.filter((row) => {
+    const matchesQuery = !query || [row.description, row.counterparty, row.sourceSheet, row.sourceDocument, row.financeCategory, row.notes]
+      .some((value) => value.toLocaleLowerCase("id-ID").includes(query.toLocaleLowerCase("id-ID")));
+    return matchesQuery && (!source || row.sourceSheet === source) && (!category || row.financeCategory === category);
+  });
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -62,7 +72,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Sear
         {view === "summary" ? (
           <FinanceSummary income={totalIncome} month={month} outcome={totalOutcome} previousRows={previousRows} rows={allRows} />
         ) : (
-          <LedgerView allRows={filteredRows} rows={pageRows} currentPage={safePage} params={params} totalItems={filteredRows.length} view={view} />
+          <LedgerView allRows={filteredRows} category={category} currentPage={safePage} params={params} query={query} rows={pageRows} source={source} sources={sources} totalItems={filteredRows.length} view={view} />
         )}
       </section>
     </AppShell>
@@ -149,11 +159,13 @@ function Metric({ label, tone, value, numeric = false }: { label: string; tone: 
   return <article className={`finance-metric ${tone}`}><span>{label}</span><strong>{numeric ? value.toLocaleString("id-ID") : money(value)}</strong></article>;
 }
 
-function LedgerView({ allRows, rows, currentPage, params, totalItems, view }: { allRows: Array<typeof financeRecords.$inferSelect>; rows: Array<typeof financeRecords.$inferSelect>; currentPage: number; params: Record<string, string | string[] | undefined>; totalItems: number; view: FinanceTab }) {
+function LedgerView({ allRows, category, rows, currentPage, params, query, source, sources, totalItems, view }: { allRows: Array<typeof financeRecords.$inferSelect>; category: string; rows: Array<typeof financeRecords.$inferSelect>; currentPage: number; params: Record<string, string | string[] | undefined>; query: string; source: string; sources: string[]; totalItems: number; view: FinanceTab }) {
   const title = FINANCE_TABS.find((tab) => tab.key === view)?.label || "Finance";
+  const returnTo = `/finance?${new URLSearchParams(Object.entries(params).flatMap(([key, value]) => value === undefined ? [] : [[key, Array.isArray(value) ? value[0] || "" : value]])).toString()}`;
   return <article className="finance-panel ledger-panel"><div className="finance-panel-heading"><div><h2>{title}</h2><p>{totalItems.toLocaleString("id-ID")} transaksi · {money(sum(allRows))} total ledger</p></div>{view === "sga" ? <FinanceExcelDownload rows={allRows} /> : null}</div>
-    <div className="customer-table-wrap"><table className="customer-table finance-table"><thead><tr><th>Tanggal</th><th>Sumber</th><th>Keterangan</th><th>Tujuan</th><th>Kategori</th><th>Nominal</th></tr></thead>
-      <tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><strong>{dateLabel(row.transactionDate)}</strong><small>{row.transactionTime}</small></td><td>{row.sourceSheet}<small>{row.sourceDocument || `Baris ${row.sourceRow}`}</small></td><td>{row.description || "-"}</td><td>{row.counterparty || "-"}</td><td><span className={`finance-badge ${row.direction}`}>{row.financeCategory}</span></td><td className="numeric-cell"><strong>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</strong></td></tr>) : <tr><td colSpan={6}>Belum ada transaksi pada periode ini.</td></tr>}</tbody></table>
+    <form className="finance-ledger-filters" method="get"><input name="view" type="hidden" value={view} />{single(params.month) ? <input name="month" type="hidden" value={single(params.month)} /> : null}<label><span>Cari transaksi</span><input defaultValue={query} name="q" placeholder="Keterangan, tujuan, sumber..." type="search" /></label><label><span>Sumber</span><select defaultValue={source} name="source"><option value="">Semua sumber</option>{sources.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>{view === "sga" ? <label><span>Kategori</span><select defaultValue={category} name="category"><option value="">Semua kategori SGA</option>{SGA_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label> : null}<button type="submit">Filter</button>{query || source || category ? <Link className="finance-filter-reset" href={tabHref(view, single(params.month))}>Reset</Link> : null}</form>
+    <div className="customer-table-wrap"><table className="customer-table finance-table"><thead><tr><th>Tanggal</th><th>Sumber</th><th>Keterangan</th><th>Tujuan</th><th>Kategori / Pindahkan</th><th>Nominal</th></tr></thead>
+      <tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><strong>{dateLabel(row.transactionDate)}</strong><small>{row.transactionTime}</small></td><td>{row.sourceSheet}<small>{row.sourceDocument || `Baris ${row.sourceRow}`}</small></td><td>{row.description || "-"}</td><td>{row.counterparty || "-"}</td><td><form action={moveFinanceRecordAction} className="finance-move-form"><input name="recordId" type="hidden" value={row.id} /><input name="returnTo" type="hidden" value={returnTo} /><select aria-label={`Pindahkan kategori transaksi ${row.description || row.id}`} defaultValue={row.financeCategory} name="financeCategory">{FINANCE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select><button type="submit">Pindahkan</button></form></td><td className="numeric-cell"><strong>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</strong></td></tr>) : <tr><td colSpan={6}>Tidak ada transaksi yang cocok dengan filter.</td></tr>}</tbody></table>
       <Pagination currentPage={currentPage} params={params} totalItems={totalItems} />
     </div>
   </article>;
