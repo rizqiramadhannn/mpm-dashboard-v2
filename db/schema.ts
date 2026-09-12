@@ -416,6 +416,9 @@ export const supplierNotes = sqliteTable(
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
     noteNo: text("note_no").notNull(),
+    noteSource: text("note_source").notNull().default("import"),
+    manualIdempotencyKey: text("manual_idempotency_key"),
+    manualPayloadHash: text("manual_payload_hash"),
     noteDate: text("note_date").notNull(),
     itemSummary: text("item_summary").notNull().default(""),
     category: text("category").notNull().default("Spareparts"),
@@ -479,6 +482,7 @@ export const supplierNotes = sqliteTable(
       table.supplierId,
       table.noteNo
     ),
+    manualIdempotencyIdx: uniqueIndex("supplier_notes_manual_idempotency_idx").on(table.manualIdempotencyKey),
     noteDateIdx: index("supplier_notes_note_date_idx").on(table.noteDate),
     paymentStatusIdx: index("supplier_notes_payment_status_idx").on(
       table.paymentStatus
@@ -489,6 +493,11 @@ export const supplierNotes = sqliteTable(
     flagIdx: index("supplier_notes_flag_idx").on(table.flag),
   })
 );
+
+export const manualNoteCounters = sqliteTable("manual_note_counters", {
+  noteDate: text("note_date").primaryKey(),
+  lastSequence: integer("last_sequence").notNull(),
+});
 
 export const supplierNoteItems = sqliteTable(
   "supplier_note_items",

@@ -24,6 +24,7 @@ const supplierItems: NavItem[] = [
   { label: "ADD NEW SUPPLIER", href: "/supplier/add-new-supplier" },
   { label: "LIST SUPPLIER", href: "/supplier/supplier-list" },
   { label: "LIST NOTA SUPPLIER", href: "/supplier/nota-supplier" },
+  { label: "NOTA MANUAL", href: "/supplier/nota-manual" },
 ];
 
 const assetItems: NavItem[] = [
