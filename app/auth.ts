@@ -9,6 +9,8 @@ import { getDb } from "../db";
 import { randomId } from "../db/id";
 import { appAdminAuditLogs, appLoginAttempts, appUsers } from "../db/schema";
 
+import { canAccessRestrictedMenus } from "./access";
+
 const pbkdf2Async = promisify(pbkdf2);
 const SESSION_COOKIE = "mpm_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -103,6 +105,14 @@ export async function requireUser(returnTo = "/dashboard") {
     redirect("/change-password");
   }
 
+  return user;
+}
+
+export async function requireRestrictedMenuUser(returnTo: string) {
+  const user = await requireUser(returnTo);
+  if (!canAccessRestrictedMenus(user)) {
+    redirect("/sph/list");
+  }
   return user;
 }
 

@@ -5,12 +5,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { financeCategoryOverrides, financeRecords } from "../../db/schema";
-import { recordActivityLog, requireUser } from "../auth";
+import { recordActivityLog, requireRestrictedMenuUser } from "../auth";
 import { FINANCE_CATEGORIES, FinanceCategory } from "./constants";
 
 export async function moveFinanceRecordAction(formData: FormData) {
   const returnTo = safeReturnTo(formData.get("returnTo"));
-  const user = await requireUser(returnTo);
+  const user = await requireRestrictedMenuUser(returnTo);
   const recordId = String(formData.get("recordId") || "");
   const category = String(formData.get("financeCategory") || "") as FinanceCategory;
   if (!recordId || !FINANCE_CATEGORIES.includes(category)) redirect(returnTo);

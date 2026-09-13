@@ -1,6 +1,6 @@
 import { and, asc, desc, gte, lte } from "drizzle-orm";
 import Link from "next/link";
-import { requireUser } from "../auth";
+import { requireRestrictedMenuUser } from "../auth";
 import { AppShell } from "../components/AppShell";
 import { Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
@@ -14,7 +14,7 @@ const PAGE_SIZE = 25;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function FinancePage({ searchParams }: { searchParams: SearchParams }) {
-  await requireUser("/finance");
+  await requireRestrictedMenuUser("/finance");
   const params = await searchParams;
   const view = normalizeView(single(params.view));
   const month = normalizeMonth(single(params.month));

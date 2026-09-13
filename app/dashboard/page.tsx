@@ -1,3 +1,4 @@
+import { requireRestrictedMenuUser } from "../auth";
 import type { CSSProperties } from "react";
 import { eq } from "drizzle-orm";
 import Link from "next/link";
@@ -490,6 +491,7 @@ async function getDashboardData() {
 }
 
 export default async function DashboardPage() {
+  await requireRestrictedMenuUser("/dashboard");
   const dashboard = await getDashboardData();
   const maxCashflow = Math.max(
     1,
