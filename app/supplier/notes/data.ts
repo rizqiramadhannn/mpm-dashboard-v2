@@ -410,10 +410,11 @@ export async function createSupplierNoteImport({
   purchasePurpose?: unknown;
 }) {
   const cleanFlag = asString(flag, "MPM") || "MPM";
-  const cleanCustomerName = requiredString(customerName, "customerName");
   const cleanPaymentTerm = asString(paymentTerm, "CBD") || "CBD";
   const cleanPurchasePurpose =
     asString(purchasePurpose, "Pembelian Langsung") || "Pembelian Langsung";
+  if (!["Stock", "Pembelian Langsung"].includes(cleanPurchasePurpose)) throw new Error("Tujuan pembelian tidak valid.");
+  const cleanCustomerName = cleanPurchasePurpose === "Stock" ? "" : requiredString(customerName, "customerName");
   const cleanFile = fileInput(file);
 
   if (!cleanFile.hasFile) {
@@ -438,7 +439,7 @@ export async function createSupplierNoteImport({
       fileSha256: storedFile.sha256,
       fileSize: storedFile.size,
       flag: cleanFlag,
-      customerId: asString(customerId) || null,
+      customerId: cleanPurchasePurpose === "Stock" ? null : asString(customerId) || null,
       customerName: cleanCustomerName,
       paymentTerm: cleanPaymentTerm,
       purchasePurpose: cleanPurchasePurpose,
@@ -526,11 +527,12 @@ export async function importSupplierNoteFromJson(id: string, payload: SupplierNo
     throw new Error("Pending nota sudah diproses.");
   }
 
+  const purchasePurpose = asString(payload.purchasePurpose, pendingImport.purchasePurpose) || pendingImport.purchasePurpose;
+  if (!["Stock", "Pembelian Langsung"].includes(purchasePurpose)) throw new Error("Tujuan pembelian tidak valid.");
+  const customerName = purchasePurpose === "Stock" ? "" : requiredString(asString(payload.customerName, pendingImport.customerName) || pendingImport.customerName, "customerName");
   const note = await createSupplierNote({
     ...payload,
-    customerName:
-      asString(payload.customerName, pendingImport.customerName) ||
-      pendingImport.customerName,
+    customerName,
     file: {
       base64: pendingImport.fileBase64,
       mimeType: pendingImport.fileMimeType,
@@ -547,9 +549,7 @@ export async function importSupplierNoteFromJson(id: string, payload: SupplierNo
     paymentTerm:
       asString(payload.paymentTerm, pendingImport.paymentTerm) ||
       pendingImport.paymentTerm,
-    purchasePurpose:
-      asString(payload.purchasePurpose, pendingImport.purchasePurpose) ||
-      pendingImport.purchasePurpose,
+    purchasePurpose,
   });
 
   await db

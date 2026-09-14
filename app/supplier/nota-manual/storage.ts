@@ -1,6 +1,6 @@
 import { count, desc, eq, sql } from "drizzle-orm";
 import type { getDb } from "../../../db";
-import { appAdminAuditLogs, manualNoteCounters, supplierNoteItems, supplierNotes, suppliers } from "../../../db/schema";
+import { appAdminAuditLogs, customers, manualNoteCounters, supplierNoteItems, supplierNotes, suppliers } from "../../../db/schema";
 import { ManualNoteError, manualNoteNumber, validateManualNote } from "./model";
 import { generateManualNotePdf } from "./pdf";
 
@@ -22,7 +22,7 @@ function result(note: { id: string; noteNo: string }, reused: boolean) {
 export async function createManualNote(db: Db, value: unknown, actor: Actor, render = generateManualNotePdf) {
   const input = validateManualNote(value);
   const key = `${actor.id}:${input.idempotencyKey}`;
-  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, items: input.items })));
+  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, purchasePurpose: input.purchasePurpose, customerId: input.customerId, items: input.items })));
   const save = () => db.transaction(async tx => {
     // Acquire the write lock before looking up idempotency. All concurrent
     // writers serialize here, including retries with the same request key.
@@ -39,6 +39,12 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
     }
     const [supplier] = await tx.select({ id: suppliers.id, name: suppliers.name }).from(suppliers).where(eq(suppliers.id, input.supplierId)).limit(1);
     if (!supplier) throw new ManualNoteError("Supplier tidak ditemukan. Pilih supplier dari master.");
+    let customerName = "";
+    if (input.purchasePurpose === "Pembelian Langsung") {
+      const [customer] = await tx.select({ name: customers.name }).from(customers).where(eq(customers.id, input.customerId)).limit(1);
+      if (!customer) throw new ManualNoteError("Customer tidak ditemukan. Pilih customer dari master.");
+      customerName = customer.name;
+    }
     const noteNo = manualNoteNumber(input.noteDate, counter.sequence);
     const pdf = render({ noteNo, noteDate: input.noteDate, supplierName: supplier.name, items: input.items, amount: input.amount });
     const fileBase64 = base64(pdf);
@@ -50,7 +56,7 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
       manualIdempotencyKey: key, manualPayloadHash: payloadHash,
       itemSummary: input.items.map(item => item.description).join("; "), amount: input.amount,
       paymentStatus: "BELUM BAYAR", paidAmount: 0, remainingPayment: input.amount,
-      category: "Spareparts", flag: "MPM", purchasePurpose: "Pembelian Langsung",
+      category: "Spareparts", flag: "MPM", purchasePurpose: input.purchasePurpose, customerName,
       sourceFileName: fileName, sourceFileMimeType: "application/pdf", sourceFileSize: pdf.length, sourceFileBase64: fileBase64, sourceFileSha256: sha256,
       invoiceFileName: fileName, invoiceFileMimeType: "application/pdf", invoiceFileSize: pdf.length, invoiceFileBase64: fileBase64, invoiceFileSha256: sha256,
     }).returning({ id: supplierNotes.id, noteNo: supplierNotes.noteNo });

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { downloadExcel } from "../../components/excelExport";
+import { TableColumnPicker } from "../../components/ConfigurableTable";
+import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 
 export type SphExportRow = {
   customerCode: string;
@@ -116,6 +118,7 @@ export function SphExcelDownload({ rows }: { rows: SphExportRow[] }) {
 
   return (
     <div className="table-export-bar">
+      <TableColumnPicker tableId="sph-list" columns={TABLE_COLUMNS.sph_list} />
       <div className="download-menu">
         <button
           aria-expanded={open}

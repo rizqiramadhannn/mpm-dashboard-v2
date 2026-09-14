@@ -1,4 +1,6 @@
 "use client";
+import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
+import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 
 import { useState } from "react";
 import { SupplierNotesTable } from "./SupplierNotesTable";
@@ -105,8 +107,10 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
       {activeTab === "invoice" ? (
         <SupplierNotesTable notes={notes} />
       ) : (
+        <>
+        <div className="table-export-bar"><TableColumnPicker tableId="supplier-items" columns={TABLE_COLUMNS.supplier_items} /></div>
         <div className="customer-table-wrap">
-          <table
+          <ConfigurableTable tableId="supplier-items" columns={TABLE_COLUMNS.supplier_items}
             className="customer-table supplier-note-item-table"
             data-sortable-table
             data-sort-column="0"
@@ -114,46 +118,47 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
           >
             <thead>
               <tr>
-                <th>Tanggal</th>
-                <th>No Nota</th>
-                <th>Supplier</th>
-                <th>Customer</th>
-                <th>Flag</th>
-                <th>PN</th>
-                <th>Deskripsi</th>
-                <th>Qty</th>
-                <th>Harga</th>
-                <th>Total</th>
+                <TableHeader columnId="c0">Tanggal</TableHeader>
+                <TableHeader columnId="c1">No Nota</TableHeader>
+                <TableHeader columnId="c2">Supplier</TableHeader>
+                <TableHeader columnId="c3">Customer</TableHeader>
+                <TableHeader columnId="c4">Flag</TableHeader>
+                <TableHeader columnId="c5">PN</TableHeader>
+                <TableHeader columnId="c6">Deskripsi</TableHeader>
+                <TableHeader columnId="c7">Qty</TableHeader>
+                <TableHeader columnId="c8">Harga</TableHeader>
+                <TableHeader columnId="c9">Total</TableHeader>
               </tr>
             </thead>
             <tbody>
               {itemRows.length > 0 ? (
                 itemRows.map((item) => (
                   <tr key={item.id}>
-                    <td data-sort-value={item.noteDate ?? ""}>{formatDate(item.noteDate)}</td>
-                    <td>
+                    <TableCell columnId="c0" data-sort-value={item.noteDate ?? ""}>{formatDate(item.noteDate)}</TableCell>
+                    <TableCell columnId="c1">
                       <strong className="table-primary">{item.noteNo}</strong>
-                    </td>
-                    <td>{item.supplierName}</td>
-                    <td>{item.customerName || "-"}</td>
-                    <td>{item.flag}</td>
-                    <td>{item.partNumber || "-"}</td>
-                    <td>{item.description}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c2">{item.supplierName}</TableCell>
+                    <TableCell columnId="c3">{item.customerName || "-"}</TableCell>
+                    <TableCell columnId="c4">{item.flag}</TableCell>
+                    <TableCell columnId="c5">{item.partNumber || "-"}</TableCell>
+                    <TableCell columnId="c6">{item.description}</TableCell>
+                    <TableCell columnId="c7">
                       {item.quantity} {item.uom}
-                    </td>
-                    <td>{formatRupiah(item.unitPrice)}</td>
-                    <td>{formatRupiah(item.totalPrice)}</td>
+                    </TableCell>
+                    <TableCell columnId="c8">{formatRupiah(item.unitPrice)}</TableCell>
+                    <TableCell columnId="c9">{formatRupiah(item.totalPrice)}</TableCell>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10}>Tidak ada item nota supplier sesuai filter.</td>
+                  <TableSpanCell >Tidak ada item nota supplier sesuai filter.</TableSpanCell>
                 </tr>
               )}
             </tbody>
-          </table>
+          </ConfigurableTable>
         </div>
+        </>
       )}
     </div>
   );

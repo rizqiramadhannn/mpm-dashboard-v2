@@ -1,7 +1,10 @@
 "use client";
+import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../components/ConfigurableTable";
+import { TABLE_COLUMNS } from "../components/tableDefinitions";
 
 import { useMemo, useState, useTransition } from "react";
 import { downloadExcel } from "../components/excelExport";
+import { ItemListModal, type SphItem } from "../sph/list/ItemListModal";
 
 type InvoiceFile = {
   mimeType: string;
@@ -30,6 +33,7 @@ export type LedgerRow = {
   paymentTerm: string;
   sphId: string;
   sphNo: string;
+  items: SphItem[];
   status: string;
   statusClassName: string;
   ttdMateraiFile: InvoiceFile | null;
@@ -141,9 +145,7 @@ export function InvoiceLedgerTable({
         { header: "OMSET", value: (row) => row.totalAmount, width: 16 },
         { header: "TERBAYAR", value: (row) => row.paidAmount, width: 16 },
         { header: "MODAL", value: (row) => row.modalAmount, width: 16 },
-        { header: "FEE", value: (row) => row.feeAmount, width: 16 },
         { header: "ONGKIR", value: (row) => row.ongkirAmount, width: 16 },
-        { header: "KOD", value: (row) => row.kodAmount, width: 16 },
         { header: "HPP", value: (row) => row.hppAmount, width: 16 },
         { header: "GP", value: (row) => row.gpAmount, width: 16 },
         { header: "%GP", value: (row) => row.gpPercent, width: 12 },
@@ -441,6 +443,7 @@ export function InvoiceLedgerTable({
   return (
     <>
       <div className="table-export-bar">
+        <TableColumnPicker tableId="invoices" columns={TABLE_COLUMNS.invoices} />
         <button
           className="secondary-button"
           disabled={localRows.length === 0}
@@ -451,68 +454,64 @@ export function InvoiceLedgerTable({
         </button>
       </div>
       <div className="customer-table-wrap invoice-ledger-wrap">
-        <table className="customer-table invoice-ledger-table" data-sortable-table>
+        <ConfigurableTable tableId="invoices" columns={TABLE_COLUMNS.invoices} className="customer-table invoice-ledger-table" data-sortable-table>
         <thead>
           <tr>
-            <th>NO</th>
-            <th>TANGGAL</th>
-            <th>CUSTOMER</th>
-            <th>NO INVOICE</th>
-            <th>CATEGORY</th>
-            <th>OMSET</th>
-            <th>TERBAYAR</th>
-            <th>MODAL</th>
-            <th>FEE</th>
-            <th>ONGKIR</th>
-            <th>KOD</th>
-            <th>HPP</th>
-            <th>GP</th>
-            <th>%GP</th>
-            <th>PEMBAYARAN</th>
-            <th>STATUS</th>
-            <th>JADWAL PEMBAYARAN</th>
-            <th>TANGGAL BAYAR</th>
-            <th>AGING</th>
-            <th>TTD MATERAI</th>
-            <th>BUKTI BAYAR</th>
-            <th>ACTION</th>
+            <TableHeader columnId="c0">NO</TableHeader>
+            <TableHeader columnId="c1">TANGGAL</TableHeader>
+            <TableHeader columnId="c2">CUSTOMER</TableHeader>
+            <TableHeader columnId="c3">NO INVOICE</TableHeader>
+            <TableHeader columnId="c4">CATEGORY</TableHeader>
+            <TableHeader columnId="c5">OMSET</TableHeader>
+            <TableHeader columnId="c6">TERBAYAR</TableHeader>
+            <TableHeader columnId="c7">MODAL</TableHeader>
+            <TableHeader columnId="c8">ONGKIR</TableHeader>
+            <TableHeader columnId="c9">HPP</TableHeader>
+            <TableHeader columnId="c10">GP</TableHeader>
+            <TableHeader columnId="c11">%GP</TableHeader>
+            <TableHeader columnId="c12">PEMBAYARAN</TableHeader>
+            <TableHeader columnId="c13">STATUS</TableHeader>
+            <TableHeader columnId="c14">JADWAL PEMBAYARAN</TableHeader>
+            <TableHeader columnId="c15">TANGGAL BAYAR</TableHeader>
+            <TableHeader columnId="c16">AGING</TableHeader>
+            <TableHeader columnId="c17">TTD MATERAI</TableHeader>
+            <TableHeader columnId="c18">BUKTI BAYAR</TableHeader>
+            <TableHeader columnId="c19">ACTION</TableHeader>
           </tr>
         </thead>
         <tbody>
           {localRows.length > 0 ? (
             localRows.map((row, index) => (
               <tr key={row.sphId}>
-                <td>{index + 1}</td>
-                <td>{row.invoiceDate}</td>
-                <td>
+                <TableCell columnId="c0">{index + 1}</TableCell>
+                <TableCell columnId="c1">{row.invoiceDate}</TableCell>
+                <TableCell columnId="c2">
                   <div className="stacked-cell">
                     <strong>{row.customerName}</strong>
-                    <span>{row.sphNo}</span>
+                    <ItemListModal items={row.items} sphNo={row.sphNo} triggerLabel={row.sphNo} triggerClassName="invoice-sph-link" />
                   </div>
-                </td>
-                <td>{row.invoiceNo}</td>
-                <td>SPARE PARTS</td>
-                <td>{formatMoney(row.totalAmount)}</td>
-                <td>{editableCell(row, "paidAmount")}</td>
-                <td>{editableCell(row, "modalAmount")}</td>
-                <td>{editableCell(row, "feeAmount")}</td>
-                <td>{formatMoney(row.ongkirAmount)}</td>
-                <td>{editableCell(row, "kodAmount")}</td>
-                <td>{formatMoney(row.hppAmount)}</td>
-                <td>{formatMoney(row.gpAmount)}</td>
-                <td>{row.gpPercent}</td>
-                <td>{row.paymentTerm}</td>
-                <td>
+                </TableCell>
+                <TableCell columnId="c3">{row.invoiceNo}</TableCell>
+                <TableCell columnId="c4">SPARE PARTS</TableCell>
+                <TableCell columnId="c5">{formatMoney(row.totalAmount)}</TableCell>
+                <TableCell columnId="c6">{editableCell(row, "paidAmount")}</TableCell>
+                <TableCell columnId="c7">{editableCell(row, "modalAmount")}</TableCell>
+                <TableCell columnId="c8">{formatMoney(row.ongkirAmount)}</TableCell>
+                <TableCell columnId="c9">{formatMoney(row.hppAmount)}</TableCell>
+                <TableCell columnId="c10">{formatMoney(row.gpAmount)}</TableCell>
+                <TableCell columnId="c11">{row.gpPercent}</TableCell>
+                <TableCell columnId="c12">{row.paymentTerm}</TableCell>
+                <TableCell columnId="c13">
                   <span className={`ledger-status ${row.statusClassName}`}>
                     {row.status}
                   </span>
-                </td>
-                <td>{row.paymentDueDate}</td>
-                <td>{row.paymentDate}</td>
-                <td>{row.aging}</td>
-                <td>{fileCell(row, "ttd")}</td>
-                <td>{fileCell(row, "paymentProof")}</td>
-                <td>
+                </TableCell>
+                <TableCell columnId="c14">{row.paymentDueDate}</TableCell>
+                <TableCell columnId="c15">{row.paymentDate}</TableCell>
+                <TableCell columnId="c16">{row.aging}</TableCell>
+                <TableCell columnId="c17">{fileCell(row, "ttd")}</TableCell>
+                <TableCell columnId="c18">{fileCell(row, "paymentProof")}</TableCell>
+                <TableCell columnId="c19">
                   {row.invoiceId ? (
                     <div className="table-actions">
                       <a href={`/invoice/download/${row.invoiceId}`}>Download Invoice</a>
@@ -520,16 +519,16 @@ export function InvoiceLedgerTable({
                   ) : (
                     "-"
                   )}
-                </td>
+                </TableCell>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan={22}>Belum ada SPH untuk invoice.</td>
+              <TableSpanCell >Belum ada SPH untuk invoice.</TableSpanCell>
             </tr>
           )}
         </tbody>
-        </table>
+        </ConfigurableTable>
       </div>
 
       {preview ? (

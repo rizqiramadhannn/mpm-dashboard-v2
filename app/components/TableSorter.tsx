@@ -135,6 +135,11 @@ export function TableSorter() {
     for (const table of tables) {
       initializeTable(table);
     }
+    const observer = new MutationObserver(() => {
+      for (const table of document.querySelectorAll<HTMLTableElement>("table[data-sortable-table]:not([data-sortable-initialized])")) initializeTable(table);
+    });
+    observer.observe(document.querySelector(".main-content-body") ?? document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, [pathname]);
 
   return null;

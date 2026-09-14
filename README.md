@@ -87,9 +87,12 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
+- `npm run db:sync-dev`: back up development, then copy and verify the production schema and data into development. Reads `.env.development.local` and `.env.production.local`; backups are stored in the ignored `backups/dev-db/` folder. Production is read only during this command.
+- `npm run dev`: sync the development database from production, then start local development
+- `npm run vinext:dev`: sync the development database from production, then start vinext development
 - `npm run build`: verify the vinext build output
 - `npm test`: build the starter and verify its rendered loading skeleton
+- `npm run test:table-columns`: verify column cookies and browser interactions, including forms, dialogs and Excel export. Uses installed Playwright or the bundled Codex runtime; set `CHROME_PATH` for a Chrome installation outside the default Windows location.
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 
 ## Learn More

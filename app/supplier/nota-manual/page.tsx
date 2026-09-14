@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getDb } from "../../../db";
+import { customers as customerTable } from "../../../db/schema";
+import { asc } from "drizzle-orm";
 import { requireUser } from "../../auth";
 import { AppShell } from "../../components/AppShell";
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
@@ -14,11 +16,11 @@ export const dynamic = "force-dynamic";
 export default async function ManualNotesPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   await requireUser("/supplier/nota-manual");
   const params = (await searchParams) ?? {};
-  const [suppliers, notes] = await Promise.all([listSuppliers(), getDb().then(listManualNotes)]);
+  const [suppliers, notes, customers] = await Promise.all([listSuppliers(), getDb().then(listManualNotes), getDb().then(db => db.select({ id: customerTable.id, name: customerTable.name, code: customerTable.code }).from(customerTable).orderBy(asc(customerTable.name)))]);
   const { pageRows, safePage } = paginateRows(notes, getCurrentPage(params));
   return <AppShell><section className="sph-list-page">
     <div className="dashboard-header"><div><p className="page-kicker">Supplier</p><h1>Nota Manual</h1></div><Link href="/supplier/nota-supplier">List Nota Supplier</Link></div>
-    <ManualNoteForm suppliers={suppliers.map(({ id, name }) => ({ id, name }))} defaultDate={jakartaToday()} />
+    <ManualNoteForm suppliers={suppliers.map(({ id, name }) => ({ id, name }))} customers={customers} defaultDate={jakartaToday()} />
     <section className="manual-history" aria-labelledby="manual-history-title">
       <h2 id="manual-history-title">History Nota Manual</h2>
       <div className="customer-table-wrap"><table className="customer-table"><thead><tr><th>Tanggal</th><th>Nomor Nota</th><th>Supplier</th><th>Jumlah Item</th><th>Total</th><th>File</th></tr></thead>

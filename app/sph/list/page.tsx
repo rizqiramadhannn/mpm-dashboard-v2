@@ -1,3 +1,5 @@
+import { ConfigurableTable, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
+import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -936,7 +938,7 @@ export default async function ListSphPage({
 
         <SphExcelDownload rows={exportRows} />
         <div className="customer-table-wrap">
-          <table
+          <ConfigurableTable tableId="sph-list" columns={TABLE_COLUMNS.sph_list}
             className="customer-table sph-list-table"
             data-sortable-table
             data-sort-column="0"
@@ -944,15 +946,15 @@ export default async function ListSphPage({
           >
             <thead>
               <tr>
-                <th>No. SPH</th>
-                <th>Tanggal</th>
-                <th>Customer</th>
-                <th>Pengiriman</th>
-                <th>Payment</th>
-                <th>Total</th>
-                <th>Item</th>
-                <th>Status</th>
-                <th>Action</th>
+                <TableHeader columnId="c0">No. SPH</TableHeader>
+                <TableHeader columnId="c1">Tanggal</TableHeader>
+                <TableHeader columnId="c2">Customer</TableHeader>
+                <TableHeader columnId="c3">Pengiriman</TableHeader>
+                <TableHeader columnId="c4">Payment</TableHeader>
+                <TableHeader columnId="c5">Total</TableHeader>
+                <TableHeader columnId="c6">Item</TableHeader>
+                <TableHeader columnId="c7">Status</TableHeader>
+                <TableHeader columnId="c8">Action</TableHeader>
               </tr>
             </thead>
             <tbody>
@@ -965,17 +967,17 @@ export default async function ListSphPage({
 
                   return (
                     <tr key={document.id}>
-                      <td>
+                      <TableCell columnId="c0">
                         <strong className="table-primary">{document.sphNo}</strong>
-                      </td>
-                      <td>{formatDate(document.sphDate)}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell columnId="c1">{formatDate(document.sphDate)}</TableCell>
+                      <TableCell columnId="c2">
                         <div className="stacked-cell">
                           <strong>{document.customerName}</strong>
                           <span>{document.customerCode}</span>
                         </div>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell columnId="c3">
                         <div className="stacked-cell">
                           <strong>{document.franco || "-"}</strong>
                           <span>
@@ -983,18 +985,18 @@ export default async function ListSphPage({
                             {formatDate(document.etaDate)}
                           </span>
                         </div>
-                      </td>
-                      <td>{document.paymentTerm}</td>
-                      <td>{formatRupiah(document.totalAmount)}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell columnId="c4">{document.paymentTerm}</TableCell>
+                      <TableCell columnId="c5">{formatRupiah(document.totalAmount)}</TableCell>
+                      <TableCell columnId="c6">
                         <ItemListModal items={items} sphNo={document.sphNo} />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell columnId="c7">
                         <span className={`status-badge ${status}`}>
                           {statusLabel(document.status)}
                         </span>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell columnId="c8">
                         <div className="table-actions icon-actions">
                           {isCekHarga ? (
                             <button
@@ -1070,17 +1072,17 @@ export default async function ListSphPage({
                             </button>
                           </ConfirmForm>
                         </div>
-                      </td>
+                      </TableCell>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={9}>Tidak ada SPH sesuai filter.</td>
+                  <TableSpanCell >Tidak ada SPH sesuai filter.</TableSpanCell>
                 </tr>
               )}
             </tbody>
-          </table>
+          </ConfigurableTable>
         </div>
         <Pagination
           currentPage={safePage}

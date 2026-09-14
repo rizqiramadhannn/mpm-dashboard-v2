@@ -1,5 +1,5 @@
 export type ManualItem = { description: string; quantity: number; unitPrice: number; totalPrice: number };
-export type ManualNoteInput = { noteDate: string; supplierId: string; idempotencyKey: string; items: ManualItem[]; amount: number };
+export type ManualNoteInput = { noteDate: string; supplierId: string; purchasePurpose: "Stock" | "Pembelian Langsung"; customerId: string; idempotencyKey: string; items: ManualItem[]; amount: number };
 
 export class ManualNoteError extends Error {
   status: number;
@@ -15,6 +15,10 @@ export function validateManualNote(value: unknown): ManualNoteInput {
   }
   const supplierId = typeof payload.supplierId === "string" ? payload.supplierId.trim() : "";
   if (!supplierId) throw new ManualNoteError("Supplier wajib dipilih.");
+  const purchasePurpose = payload.purchasePurpose;
+  if (purchasePurpose !== "Stock" && purchasePurpose !== "Pembelian Langsung") throw new ManualNoteError("Pilih tujuan pembelian Stock atau Pembelian Langsung.");
+  const customerId = purchasePurpose === "Pembelian Langsung" && typeof payload.customerId === "string" ? payload.customerId.trim() : "";
+  if (purchasePurpose === "Pembelian Langsung" && !customerId) throw new ManualNoteError("Customer wajib dipilih untuk pembelian langsung.");
   const idempotencyKey = typeof payload.idempotencyKey === "string" ? payload.idempotencyKey : "";
   if (!/^[a-zA-Z0-9-]{16,100}$/.test(idempotencyKey)) throw new ManualNoteError("Kunci request tidak valid.");
   if (!Array.isArray(payload.items) || payload.items.length < 1 || payload.items.length > 200) throw new ManualNoteError("Isi 1 sampai 200 item.");
@@ -33,7 +37,7 @@ export function validateManualNote(value: unknown): ManualNoteInput {
   });
   const amount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   if (!Number.isSafeInteger(amount)) throw new ManualNoteError("Total nota terlalu besar.");
-  return { noteDate, supplierId, idempotencyKey, items, amount };
+  return { noteDate, supplierId, purchasePurpose, customerId, idempotencyKey, items, amount };
 }
 
 export function manualNoteNumber(noteDate: string, sequence: number) {

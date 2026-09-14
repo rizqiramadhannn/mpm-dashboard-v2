@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type SphItem = {
+export type SphItem = {
   id: string;
   lineNo: number;
   partNumber: string;
@@ -15,6 +15,8 @@ type SphItem = {
 type ItemListModalProps = {
   items: SphItem[];
   sphNo: string;
+  triggerLabel?: string;
+  triggerClassName?: string;
 };
 
 function formatRupiah(value: number) {
@@ -25,13 +27,13 @@ function formatRupiah(value: number) {
   }).format(value);
 }
 
-export function ItemListModal({ items, sphNo }: ItemListModalProps) {
+export function ItemListModal({ items, sphNo, triggerLabel, triggerClassName }: ItemListModalProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <button className="item-modal-trigger" onClick={() => setOpen(true)} type="button">
-        {items.length} item
+      <button className={triggerClassName ?? "item-modal-trigger"} onClick={() => setOpen(true)} type="button">
+        {triggerClassName ? <span>{triggerLabel ?? `${items.length} item`}</span> : triggerLabel ?? `${items.length} item`}
       </button>
 
       {open ? (

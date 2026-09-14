@@ -14,14 +14,14 @@
 .manual-note-form label { display: grid; gap: 8px; min-width: 0; }
 .manual-note-form label > span, .manual-supplier-picker > label, .manual-line-total > span { color: #475467; font-size: 12px; font-weight: 650; }
 .manual-required { color: var(--primary); }
-.manual-note-form input, .manual-note-form textarea {
+.manual-note-form input, .manual-note-form textarea, .manual-note-form select {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-sizing: border-box;
   color: var(--foreground); font: inherit; font-size: 13px; min-height: 44px; min-width: 0; padding: 10px 12px; width: 100%;
 }
 .manual-note-form textarea { line-height: 1.5; min-height: 66px; resize: vertical; }
-.manual-note-form input:focus, .manual-note-form textarea:focus { border-color: var(--accent); outline: 3px solid #ccfbf1; }
+.manual-note-form input:focus, .manual-note-form textarea:focus, .manual-note-form select:focus { border-color: var(--accent); outline: 3px solid #ccfbf1; }
 .manual-note-form input[type=number] { font-variant-numeric: tabular-nums; }
-.manual-note-form fieldset:disabled input, .manual-note-form fieldset:disabled textarea { background: #f8fafc; color: var(--muted); }
+.manual-note-form fieldset:disabled input, .manual-note-form fieldset:disabled textarea, .manual-note-form select:disabled { background: #f8fafc; color: var(--muted); }
 .manual-supplier-picker { position: relative; }
 .manual-supplier-picker > label { display: block; margin-bottom: 8px; }
 .manual-picker-input { position: relative; }

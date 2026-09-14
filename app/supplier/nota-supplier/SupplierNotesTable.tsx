@@ -1,4 +1,6 @@
 "use client";
+import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
+import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 
 import { useState } from "react";
 import { downloadExcel } from "../../components/excelExport";
@@ -331,6 +333,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
   return (
     <>
       <div className="table-export-bar">
+        <TableColumnPicker tableId="supplier-notes" columns={TABLE_COLUMNS.supplier_notes} />
         <button
           className="secondary-button"
           disabled={rows.length === 0}
@@ -341,7 +344,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
         </button>
       </div>
       <div className="customer-table-wrap">
-        <table
+        <ConfigurableTable tableId="supplier-notes" columns={TABLE_COLUMNS.supplier_notes}
           className="customer-table supplier-note-table"
           data-sortable-table
           data-sort-column="0"
@@ -349,16 +352,16 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
         >
           <thead>
             <tr>
-              <th>Tanggal</th>
-              <th>No Nota</th>
-              <th>Supplier</th>
-              <th>Customer</th>
-              <th>Flag</th>
-              <th>Total</th>
-              <th>Payment</th>
-              <th>Item</th>
-              <th>Invoice</th>
-              <th>Bukti Bayar</th>
+              <TableHeader columnId="c0">Tanggal</TableHeader>
+              <TableHeader columnId="c1">No Nota</TableHeader>
+              <TableHeader columnId="c2">Supplier</TableHeader>
+              <TableHeader columnId="c3">Customer</TableHeader>
+              <TableHeader columnId="c4">Flag</TableHeader>
+              <TableHeader columnId="c5">Total</TableHeader>
+              <TableHeader columnId="c6">Payment</TableHeader>
+              <TableHeader columnId="c7">Item</TableHeader>
+              <TableHeader columnId="c8">Invoice</TableHeader>
+              <TableHeader columnId="c9">Bukti Bayar</TableHeader>
             </tr>
           </thead>
           <tbody>
@@ -368,19 +371,19 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
 
                 return (
                   <tr key={note.id}>
-                    <td data-sort-value={note.noteDate ?? ""}>{formatDate(note.noteDate)}</td>
-                    <td>
+                    <TableCell columnId="c0" data-sort-value={note.noteDate ?? ""}>{formatDate(note.noteDate)}</TableCell>
+                    <TableCell columnId="c1">
                       <strong className="table-primary">{note.noteNo}</strong>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c2">
                       <div className="stacked-cell">
                         <strong>{note.supplierName}</strong>
                       </div>
-                    </td>
-                    <td>{note.customerName || "-"}</td>
-                    <td>{note.flag}</td>
-                    <td>{formatRupiah(note.amount)}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c3">{note.customerName || "-"}</TableCell>
+                    <TableCell columnId="c4">{note.flag}</TableCell>
+                    <TableCell columnId="c5">{formatRupiah(note.amount)}</TableCell>
+                    <TableCell columnId="c6">
                       <div className="stacked-cell">
                         <span
                           className={`supplier-payment-status ${paymentStatusClassName(
@@ -433,11 +436,11 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                             : ""}
                         </span>
                       </div>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c7">
                       <SupplierNoteItemListModal items={note.items} noteNo={note.noteNo} />
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c8">
                       <div className="file-action-cell">
                         {note.invoiceFileName || note.invoiceFileUrl ? (
                           <button
@@ -465,8 +468,8 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                           {uploading === `${note.id}:invoice` ? "Uploading..." : "Upload"}
                         </label>
                       </div>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell columnId="c9">
                       <div className="file-action-cell">
                         {proofs.length > 0 ? (
                           <button
@@ -501,17 +504,17 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                             : "Upload"}
                         </label>
                       </div>
-                    </td>
+                    </TableCell>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan={10}>Tidak ada nota supplier sesuai filter.</td>
+                <TableSpanCell >Tidak ada nota supplier sesuai filter.</TableSpanCell>
               </tr>
             )}
           </tbody>
-        </table>
+        </ConfigurableTable>
       </div>
 
       {preview ? (

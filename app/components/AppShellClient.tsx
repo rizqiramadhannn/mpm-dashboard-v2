@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { TableSorter } from "./TableSorter";
+import { TablePreferencesProvider } from "./ConfigurableTable";
+import type { TablePreferences } from "./tablePreferences";
 
 type NavItem = {
   label: string;
@@ -46,7 +48,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppShellClient({ children, canAccessRestrictedMenus }: { children: ReactNode; canAccessRestrictedMenus: boolean }) {
+export function AppShellClient({ children, canAccessRestrictedMenus, tablePreferenceScope = "anonymous", tablePreferences = {} }: { children: ReactNode; canAccessRestrictedMenus: boolean; tablePreferenceScope?: string; tablePreferences?: TablePreferences }) {
   const pathname = usePathname();
   const sphActive = pathname.startsWith("/sph");
   const customerActive = pathname.startsWith("/customer");
@@ -55,7 +57,7 @@ export function AppShellClient({ children, canAccessRestrictedMenus }: { childre
   const employeeActive = pathname.startsWith("/employee");
 
   return (
-    <div className="app-shell">
+    <TablePreferencesProvider key={tablePreferenceScope} scope={tablePreferenceScope} initialPreferences={tablePreferences}><div className="app-shell">
       <aside className="sidebar" aria-label="Main navigation">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
@@ -236,6 +238,6 @@ export function AppShellClient({ children, canAccessRestrictedMenus }: { childre
           <span>Version {appVersion}</span>
         </footer>
       </main>
-    </div>
+    </div></TablePreferencesProvider>
   );
 }

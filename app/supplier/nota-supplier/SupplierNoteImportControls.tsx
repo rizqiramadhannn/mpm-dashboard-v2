@@ -137,7 +137,7 @@ function normalizePayload(
   return {
     ...emptyPayload,
     ...raw,
-    customerName: pendingImport.customerName,
+    customerName: pendingImport.purchasePurpose === "Stock" ? "" : pendingImport.customerName,
     flag: pendingImport.flag || "MPM",
     items: rawItems.map((item) => {
       const row = item as Partial<ImportItem>;
@@ -243,16 +243,16 @@ export function SupplierNoteImportControls({
       return;
     }
 
-    const customer = selectedUploadCustomer();
+    const customer = uploadPurchasePurpose === "Stock" ? null : selectedUploadCustomer();
 
-    if (!customer) {
+    if (uploadPurchasePurpose !== "Stock" && !customer) {
       window.alert("Pilih customer dulu.");
       return;
     }
 
     const formData = new FormData();
-    formData.set("customerId", String(customer.id));
-    formData.set("customerName", customer.name);
+    formData.set("customerId", customer ? String(customer.id) : "");
+    formData.set("customerName", customer?.name ?? "");
     formData.set("file", uploadFile);
     formData.set("flag", uploadFlag);
     formData.set("purchasePurpose", uploadPurchasePurpose);
@@ -453,7 +453,7 @@ export function SupplierNoteImportControls({
       return;
     }
 
-    if (!reviewPayload.customerName.trim()) {
+    if (reviewPayload.purchasePurpose !== "Stock" && !reviewPayload.customerName.trim()) {
       window.alert("Pilih customer dulu.");
       return;
     }
@@ -468,6 +468,7 @@ export function SupplierNoteImportControls({
       const response = await fetch(`/api/supplier-note-imports/${selectedImport.id}/import`, {
         body: JSON.stringify({
           ...reviewPayload,
+          customerName: reviewPayload.purchasePurpose === "Stock" ? "" : reviewPayload.customerName,
         }),
         headers: { "content-type": "application/json" },
         method: "POST",
@@ -523,11 +524,26 @@ export function SupplierNoteImportControls({
             </div>
             <div className="supplier-import-form">
               <label>
+                <span>Tujuan pembelian</span>
+                <select
+                  onChange={(event) => { setUploadPurchasePurpose(event.target.value); setUploadCustomerId(""); }}
+                  value={uploadPurchasePurpose}
+                >
+                  {purposeOptions.map((purpose) => (
+                    <option key={purpose} value={purpose}>
+                      {purpose}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span>Customer</span>
                 <select
+                  disabled={uploadPurchasePurpose === "Stock"}
                   onChange={(event) => updateUploadCustomer(event.target.value)}
                   value={uploadCustomerId}
                 >
+                  <option value="">{uploadPurchasePurpose === "Stock" ? "Tidak diperlukan untuk stock" : "Pilih customer"}</option>
                   {customers.length > 0 ? (
                     customers.map((customer) => (
                       <option key={customer.id} value={String(customer.id)}>
@@ -552,19 +568,6 @@ export function SupplierNoteImportControls({
                 <select onChange={(event) => setUploadFlag(event.target.value)} value={uploadFlag}>
                   <option value="MPM">MPM</option>
                   <option value="BBR">BBR</option>
-                </select>
-              </label>
-              <label>
-                <span>Purpose</span>
-                <select
-                  onChange={(event) => setUploadPurchasePurpose(event.target.value)}
-                  value={uploadPurchasePurpose}
-                >
-                  {purposeOptions.map((purpose) => (
-                    <option key={purpose} value={purpose}>
-                      {purpose}
-                    </option>
-                  ))}
                 </select>
               </label>
               <button className="primary-button" disabled={uploading} onClick={uploadNota} type="button">
@@ -686,6 +689,19 @@ export function SupplierNoteImportControls({
             <div className="supplier-review-body">
               <div className="supplier-review-grid">
                 <label>
+                  <span>Tujuan pembelian</span>
+                  <select
+                    onChange={(event) => setReviewPayload(current => ({ ...current, purchasePurpose: event.target.value, customerName: "" }))}
+                    value={reviewPayload.purchasePurpose}
+                  >
+                    {purposeOptions.map((purpose) => (
+                      <option key={purpose} value={purpose}>
+                        {purpose}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   <span>Supplier</span>
                   <select
                     onChange={(event) => updateReviewField("supplierName", event.target.value)}
@@ -755,25 +771,13 @@ export function SupplierNoteImportControls({
                   />
                 </label>
                 <label>
-                  <span>Purpose</span>
-                  <select
-                    onChange={(event) => updateReviewField("purchasePurpose", event.target.value)}
-                    value={reviewPayload.purchasePurpose}
-                  >
-                    {purposeOptions.map((purpose) => (
-                      <option key={purpose} value={purpose}>
-                        {purpose}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
                   <span>Customer</span>
                   <select
+                    disabled={reviewPayload.purchasePurpose === "Stock"}
                     onChange={(event) => updateReviewCustomer(event.target.value)}
                     value={reviewPayload.customerName}
                   >
-                    <option value="">Pilih customer</option>
+                    <option value="">{reviewPayload.purchasePurpose === "Stock" ? "Tidak diperlukan untuk stock" : "Pilih customer"}</option>
                     {customers.map((customer) => (
                       <option key={customer.id} value={customer.name}>
                         {customer.code} - {customer.name}

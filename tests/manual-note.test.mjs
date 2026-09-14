@@ -13,7 +13,7 @@ import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manua
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
-const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
+const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
 
 async function fixture(run) {
   const dir = await mkdtemp(join(tmpdir(), "mpm-manual-test-"));
@@ -27,7 +27,7 @@ async function fixture(run) {
     // Build the pre-migration shape from current columns, then apply the real
     // migration. Defaults match the actual Drizzle schema used by inserts.
     const newColumns = new Set(["note_source", "manual_idempotency_key", "manual_payload_hash"]);
-    for (const table of [schema.suppliers, schema.appUsers, schema.supplierNotes, schema.supplierNoteItems, schema.appAdminAuditLogs]) {
+    for (const table of [schema.customers, schema.suppliers, schema.appUsers, schema.supplierNotes, schema.supplierNoteItems, schema.appAdminAuditLogs]) {
       const config = getTableConfig(table);
       const columns = config.columns.filter(column => !newColumns.has(column.name)).map(column => {
         let value = `"${column.name}" ${column.getSQLType()}${column.primary ? " PRIMARY KEY" : ""}${column.notNull ? " NOT NULL" : ""}`;
@@ -45,6 +45,7 @@ async function fixture(run) {
     const dbs = clients.map(client => drizzle(client, { schema }));
     await dbs[0].insert(schema.suppliers).values([{ id: "supplier-1", name: "GIBRIL", normalizedName: "GIBRIL" }, { id: "supplier-2", name: "ALI IMRAN", normalizedName: "ALI IMRAN" }]);
     await dbs[0].insert(schema.appUsers).values({ id: actor.id, username: actor.username, passwordHash: "not-a-password", role: "user" });
+    await dbs[0].insert(schema.customers).values({ id: "customer-1", name: "CUSTOMER SATU", code: "C001" });
     await run(dbs, client);
   } finally {
     clients.forEach(client => client.close());
@@ -115,3 +116,24 @@ test("PDF wraps long unbroken descriptions and paginates without lost items", ()
   assert.ok(Number(pdf.match(/\/Count (\d+)/)?.[1]) > 1); assert.match(pdf, /ITEM-34/); assert.match(pdf, /Hormat Kami/);
   assert.equal((pdf.match(/Hormat Kami/g) ?? []).length, 1);
 });
+
+
+test("purchase purpose requires a customer only for direct purchases", () => {
+  assert.throws(() => validateManualNote(payload({ purchasePurpose: "invalid" })), /tujuan pembelian/);
+  assert.throws(() => validateManualNote(payload({ purchasePurpose: "Pembelian Langsung" })), /Customer wajib/);
+  assert.equal(validateManualNote(payload({ customerId: "customer-1" })).customerId, "");
+});
+
+test("persist purchase purpose and master customer, reject missing customers and conflicting retries", () => fixture(async ([db], client) => {
+  const input = payload({ purchasePurpose: "Pembelian Langsung", customerId: "customer-1" });
+  const direct = await createManualNote(db, input, actor);
+  const rows = (await client.execute({ sql: "SELECT purchase_purpose, customer_name FROM supplier_notes WHERE id = ?", args: [direct.id] })).rows;
+  assert.equal(rows[0].purchase_purpose, "Pembelian Langsung");
+  assert.equal(rows[0].customer_name, "CUSTOMER SATU");
+  await assert.rejects(createManualNote(db, { ...input, purchasePurpose: "Stock" }, actor), /data berbeda/);
+  await assert.rejects(createManualNote(db, payload({ purchasePurpose: "Pembelian Langsung", customerId: "missing" }), actor), /Customer tidak ditemukan/);
+  const stock = await createManualNote(db, payload({ customerId: "customer-1" }), actor);
+  const stockRow = (await client.execute({ sql: "SELECT purchase_purpose, customer_name FROM supplier_notes WHERE id = ?", args: [stock.id] })).rows[0];
+  assert.equal(stockRow.purchase_purpose, "Stock");
+  assert.equal(stockRow.customer_name, "");
+}));

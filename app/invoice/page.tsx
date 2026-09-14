@@ -390,11 +390,24 @@ export default async function InvoicePage({
           .select({
             id: sphItems.id,
             sphId: sphItems.sphId,
+            lineNo: sphItems.lineNo,
+            partNumber: sphItems.partNumber,
+            partName: sphItems.partName,
+            quantity: sphItems.quantity,
+            unitPrice: sphItems.unitPrice,
+            totalPrice: sphItems.totalPrice,
           })
           .from(sphItems)
           .where(inArray(sphItems.sphId, sphIds))
       : [];
   const sphIdByItem = new Map(itemRows.map((item) => [item.id, item.sphId]));
+  const itemsBySph = new Map<string, LedgerRow["items"]>();
+  for (const { sphId, ...item } of itemRows) {
+    const items = itemsBySph.get(sphId) ?? [];
+    items.push(item);
+    itemsBySph.set(sphId, items);
+  }
+  for (const items of itemsBySph.values()) items.sort((a, b) => a.lineNo - b.lineNo);
   const itemIds = itemRows.map((item) => item.id);
   const journeyRows =
     itemIds.length > 0
@@ -474,6 +487,7 @@ export default async function InvoicePage({
       paymentTerm,
       sphId: sph.id,
       sphNo: sph.sphNo,
+      items: itemsBySph.get(sph.id) ?? [],
       status,
       statusClassName: status.toLowerCase().replace(/\s+/g, "-"),
       ttdMateraiFile: invoice?.ttdMateraiFileName

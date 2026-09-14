@@ -10,10 +10,12 @@ import { SupplierPicker } from "./SupplierPicker";
 type Row = { key: number; description: string; quantity: string; unitPrice: string };
 const emptyRow = (key: number): Row => ({ key, description: "", quantity: "1", unitPrice: "" });
 
-export function ManualNoteForm({ suppliers, defaultDate }: { suppliers: { id: string; name: string }[]; defaultDate: string }) {
+export function ManualNoteForm({ suppliers, customers, defaultDate }: { suppliers: { id: string; name: string }[]; customers: { id: string; name: string; code: string }[]; defaultDate: string }) {
   const router = useRouter();
   const [noteDate, setNoteDate] = useState(defaultDate);
   const [supplierId, setSupplierId] = useState("");
+  const [purchasePurpose, setPurchasePurpose] = useState<"Stock" | "Pembelian Langsung">("Stock");
+  const [customerId, setCustomerId] = useState("");
   const [rows, setRows] = useState<Row[]>([emptyRow(0)]);
   const nextRow = useRef(1);
   const requestKey = useRef("");
@@ -37,7 +39,7 @@ export function ManualNoteForm({ suppliers, defaultDate }: { suppliers: { id: st
     locked.current = true; setBusy(true); setUncertain(true); setError(""); setCreated(null);
     requestKey.current ||= crypto.randomUUID();
     try {
-      const response = await fetch("/supplier/nota-manual/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteDate, supplierId, idempotencyKey: requestKey.current, items: rows.map(row => ({ description: row.description, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice) })) }) });
+      const response = await fetch("/supplier/nota-manual/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteDate, supplierId, purchasePurpose, customerId, idempotencyKey: requestKey.current, items: rows.map(row => ({ description: row.description, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice) })) }) });
       if (response.redirected) throw new Error("Sesi berakhir. Login kembali lalu coba request yang sama.");
       const body = await response.json();
       if (!response.ok) {
@@ -74,6 +76,20 @@ export function ManualNoteForm({ suppliers, defaultDate }: { suppliers: { id: st
             <SupplierPicker suppliers={suppliers} value={supplierId} onChange={setSupplierId} />
             <div className="manual-supplier-help"><span>Pilih dari master supplier.</span><Link href="/supplier/add-new-supplier">+ Tambah supplier</Link></div>
           </div>
+          <label>
+            <span>Tujuan pembelian <span className="manual-required">*</span></span>
+            <select value={purchasePurpose} onChange={event => { setPurchasePurpose(event.target.value as "Stock" | "Pembelian Langsung"); setCustomerId(""); }}>
+              <option value="Stock">Stock</option>
+              <option value="Pembelian Langsung">Pembelian Langsung</option>
+            </select>
+          </label>
+          <label>
+            <span>Customer {purchasePurpose === "Pembelian Langsung" && <span className="manual-required">*</span>}</span>
+            <select value={customerId} disabled={purchasePurpose === "Stock"} required={purchasePurpose === "Pembelian Langsung"} onChange={event => setCustomerId(event.target.value)}>
+              <option value="">{purchasePurpose === "Stock" ? "Tidak diperlukan untuk stock" : "Pilih customer"}</option>
+              {customers.map(customer => <option key={customer.id} value={customer.id}>{customer.name} ({customer.code})</option>)}
+            </select>
+          </label>
         </div>
       </fieldset>
       <fieldset disabled={busy || uncertain} className="manual-item-section">
