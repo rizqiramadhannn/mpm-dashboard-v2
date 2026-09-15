@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph } from "../../sph/workflow";
 import { desc, eq, inArray, like } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -52,21 +53,6 @@ function parseAmount(value: FormDataEntryValue | null, key: string) {
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function normalizedSphStatus(status: string) {
-  const aliases: Record<string, string> = {
-    cancelled: "cancel",
-    draft: "cek_harga",
-    invoiced: "menunggu_pengiriman",
-    pending_invoice: "menunggu_pengiriman",
-  };
-
-  return aliases[status] ?? status;
-}
-
-function isEligibleSph(status: string) {
-  return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
 }
 
 function parseSupply(value: string) {
@@ -158,7 +144,7 @@ async function createShipmentAction(formData: FormData) {
     throw new Error("Sebagian item tidak ditemukan.");
   }
 
-  const invalidSph = itemRows.find((item) => !isEligibleSph(item.sphStatus));
+  const invalidSph = itemRows.find((item) => !isInvoiceEligibleSph(item.sphStatus));
 
   if (invalidSph) {
     throw new Error("Ada item dari SPH yang belum eligible untuk pengiriman.");
@@ -293,7 +279,7 @@ async function getAvailableItems() {
     })
     .from(sphDocuments)
     .orderBy(desc(sphDocuments.createdAt), desc(sphDocuments.id));
-  const eligibleDocuments = documentRows.filter((document) => isEligibleSph(document.status));
+  const eligibleDocuments = documentRows.filter((document) => isInvoiceEligibleSph(document.status));
   const sphIds = eligibleDocuments.map((document) => document.sphId);
   const itemRows =
     sphIds.length > 0

@@ -67,6 +67,7 @@ export const sphDocuments = sqliteTable(
     status: text("status", {
       enum: [
         "cek_harga",
+        "menunggu_po_konfirmasi",
         "menunggu_pengiriman",
         "proses_pengiriman",
         "selesai",

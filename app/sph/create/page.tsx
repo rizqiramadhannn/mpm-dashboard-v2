@@ -1,3 +1,4 @@
+import { monthlyOutstandingAmount } from "../workflow";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
@@ -178,33 +179,10 @@ function paymentDueDateFromTerm(sphDate: string, paymentTerm: string) {
   return sphDate;
 }
 
-function isUnpaidInvoice(status: string) {
-  return !["done", "cancelled"].includes(status);
-}
-
-function normalizedSphStatus(status: string) {
-  const aliases: Record<string, string> = {
-    cancelled: "cancel",
-    draft: "cek_harga",
-    invoiced: "menunggu_pengiriman",
-    pending_invoice: "menunggu_pengiriman",
-  };
-
-  return aliases[status] ?? status;
-}
-
-function isInvoiceEligibleSph(status: string) {
-  return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
-}
-
 function formatMoney(value: number) {
   return `Rp ${new Intl.NumberFormat("id-ID", {
     maximumFractionDigits: 0,
   }).format(value)}`;
-}
-
-function isSameMonth(dateValue: string | null, monthKey: string) {
-  return Boolean(dateValue?.startsWith(monthKey));
 }
 
 async function getMonthlyOutstandingInvoiceAmount(customerId: string, monthKey: string) {
@@ -234,21 +212,7 @@ async function getMonthlyOutstandingInvoiceAmount(customerId: string, monthKey: 
     })
     .from(invoiceDocuments)
     .where(inArray(invoiceDocuments.sphId, sphIds));
-  const invoiceBySph = new Map(invoiceRows.map((invoice) => [invoice.sphId, invoice]));
-
-  return sphRows.reduce((sum, sph) => {
-    const invoice = invoiceBySph.get(sph.id);
-
-    if (invoice) {
-      return isUnpaidInvoice(invoice.status) && isSameMonth(invoice.invoiceDate, monthKey)
-        ? sum + Math.max(invoice.totalAmount - invoice.paidAmount, 0)
-        : sum;
-    }
-
-    return isInvoiceEligibleSph(sph.status) && isSameMonth(sph.sphDate, monthKey)
-      ? sum + sph.totalAmount
-      : sum;
-  }, 0);
+  return monthlyOutstandingAmount(sphRows, invoiceRows, monthKey);
 }
 
 async function assertCustomerWithinCreditLimits(customer: {

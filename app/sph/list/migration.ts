@@ -1,5 +1,6 @@
 export const migratableSphStatuses = [
   "cek_harga",
+  "menunggu_po_konfirmasi",
   "menunggu_pengiriman",
   "cancel",
 ] as const;
@@ -106,7 +107,7 @@ export function buildSphMigrationUpdates({
 
   if (invalidStatus) {
     throw new Error(
-      `SPH ${invalidStatus.sphNo} tidak bisa dimigrasi karena statusnya bukan Cek Harga, Menunggu Pengiriman, atau Cancel.`
+      `SPH ${invalidStatus.sphNo} tidak bisa dimigrasi karena statusnya bukan Cek Harga, Menunggu PO / Konfirmasi, Menunggu Pengiriman, atau Cancel.`
     );
   }
 

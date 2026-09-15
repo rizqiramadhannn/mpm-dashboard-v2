@@ -143,7 +143,7 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
               <div className="preview-modal-title">
                 <strong id="migrate-sph-title">Migrate SPH</strong>
                 <span>
-                  {rows.length} SPH dengan status Menunggu Pengiriman, Cek Harga, atau Cancel
+                  {rows.length} SPH dengan status Menunggu Pengiriman, Menunggu PO / Konfirmasi, Cek Harga, atau Cancel
                 </span>
               </div>
               <button onClick={closeAll} type="button">

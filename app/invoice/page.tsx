@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph } from "../sph/workflow";
 import { desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -61,21 +62,6 @@ type SphRow = {
   status: string;
   totalAmount: number;
 };
-
-function normalizedSphStatus(status: string) {
-  const aliases: Record<string, string> = {
-    cancelled: "cancel",
-    draft: "cek_harga",
-    invoiced: "menunggu_pengiriman",
-    pending_invoice: "menunggu_pengiriman",
-  };
-
-  return aliases[status] ?? status;
-}
-
-function isInvoiceEligibleSph(status: string) {
-  return !["cek_harga", "cancel"].includes(normalizedSphStatus(status));
-}
 
 function formatDate(value: string | null) {
   if (!value) {

@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph } from "../../workflow";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
 
 const sphStatuses = [
   "cek_harga",
+  "menunggu_po_konfirmasi",
   "menunggu_pengiriman",
   "proses_pengiriman",
   "selesai",
@@ -189,10 +191,6 @@ function invoiceNoFromSph(sphNo: string) {
   return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
 }
 
-function isInvoiceEligibleSph(status: SphStatus) {
-  return !["cek_harga", "cancel"].includes(status);
-}
-
 async function hasPengirimanForSphLineNumbers(
   db: Awaited<ReturnType<typeof getDb>>,
   sphId: string,
@@ -327,176 +325,183 @@ async function updateSphAction(
       throw new Error("SPH belum memiliki pengiriman, jadi belum bisa diubah ke Selesai.");
     }
 
-    const existingItems = await db
-      .select({
-        id: sphItems.id,
-        lineNo: sphItems.lineNo,
-      })
-      .from(sphItems)
-      .where(eq(sphItems.sphId, sphId));
-    const existingItemByLine = new Map(
-      existingItems.map((item) => [item.lineNo, item.id])
-    );
-    const sphItemIdByLine = new Map<number, string>();
+    await db.transaction(async (tx) => {
+      const existingItems = await tx
+        .select({
+          id: sphItems.id,
+          lineNo: sphItems.lineNo,
+        })
+        .from(sphItems)
+        .where(eq(sphItems.sphId, sphId));
+      const existingItemByLine = new Map(
+        existingItems.map((item) => [item.lineNo, item.id])
+      );
+      const sphItemIdByLine = new Map<number, string>();
 
-    for (const item of items) {
-      const existingItemId = existingItemByLine.get(item.lineNo);
+      for (const item of items) {
+        const existingItemId = existingItemByLine.get(item.lineNo);
 
-      if (existingItemId) {
-        await db
-          .update(sphItems)
-          .set({
+        if (existingItemId) {
+          await tx
+            .update(sphItems)
+            .set({
+              partName: item.partName,
+              partNumber: item.partNumber,
+              quantity: item.quantity,
+              totalPrice: item.totalPrice,
+              unitPrice: item.unitPrice,
+            })
+            .where(eq(sphItems.id, existingItemId));
+          sphItemIdByLine.set(item.lineNo, existingItemId);
+          continue;
+        }
+
+        const [insertedItem] = await tx
+          .insert(sphItems)
+          .values({
+            lineNo: item.lineNo,
             partName: item.partName,
             partNumber: item.partNumber,
             quantity: item.quantity,
+            sphId,
             totalPrice: item.totalPrice,
             unitPrice: item.unitPrice,
           })
-          .where(eq(sphItems.id, existingItemId));
-        sphItemIdByLine.set(item.lineNo, existingItemId);
-        continue;
+          .returning({
+            id: sphItems.id,
+          });
+
+        sphItemIdByLine.set(item.lineNo, insertedItem.id);
       }
 
-      const [insertedItem] = await db
-        .insert(sphItems)
-        .values({
-          lineNo: item.lineNo,
-          partName: item.partName,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          sphId,
-          totalPrice: item.totalPrice,
-          unitPrice: item.unitPrice,
+      const removedItemIds = existingItems
+        .filter((item) => !nextLineNumbers.has(item.lineNo))
+        .map((item) => item.id);
+
+      if (removedItemIds.length > 0) {
+        await tx.delete(sphItems).where(inArray(sphItems.id, removedItemIds));
+      }
+
+      await tx
+        .update(sphDocuments)
+        .set({
+          additionalInfo,
+          amountInWords: toRupiahWords(totalAmount),
+          customerDetailLine1: customer.detailLine1,
+          customerDetailLine2: customer.detailLine2,
+          customerDetailLine3: customer.detailLine3,
+          customerCode: customerInitials(customer.code, customer.name),
+          customerId: customer.id,
+          customerName: customer.name,
+          deliveryDate,
+          etaDate,
+          franco,
+          paymentDueDate,
+          paymentTerm,
+          sphDate,
+          status,
+          totalAmount,
         })
-        .returning({
-          id: sphItems.id,
-        });
+        .where(eq(sphDocuments.id, sphId));
 
-      sphItemIdByLine.set(item.lineNo, insertedItem.id);
-    }
-
-    const removedItemIds = existingItems
-      .filter((item) => !nextLineNumbers.has(item.lineNo))
-      .map((item) => item.id);
-
-    if (removedItemIds.length > 0) {
-      await db.delete(sphItems).where(inArray(sphItems.id, removedItemIds));
-    }
-
-    await db
-      .update(sphDocuments)
-      .set({
-        additionalInfo,
-        amountInWords: toRupiahWords(totalAmount),
-        customerDetailLine1: customer.detailLine1,
-        customerDetailLine2: customer.detailLine2,
-        customerDetailLine3: customer.detailLine3,
-        customerCode: customerInitials(customer.code, customer.name),
-        customerId: customer.id,
-        customerName: customer.name,
-        deliveryDate,
-        etaDate,
-        franco,
-        paymentDueDate,
-        paymentTerm,
-        sphDate,
-        status,
-        totalAmount,
-      })
-      .where(eq(sphDocuments.id, sphId));
-
-    const invoiceNo = invoiceNoFromSph(existingSph.sphNo);
-    let [existingInvoice] = await db
-      .select({
-        id: invoiceDocuments.id,
-        invoiceNo: invoiceDocuments.invoiceNo,
-      })
-      .from(invoiceDocuments)
-      .where(eq(invoiceDocuments.sphId, sphId))
-      .limit(1);
-
-    if (!existingInvoice) {
-      [existingInvoice] = await db
+      const invoiceNo = invoiceNoFromSph(existingSph.sphNo);
+      let [existingInvoice] = await tx
         .select({
           id: invoiceDocuments.id,
           invoiceNo: invoiceDocuments.invoiceNo,
         })
         .from(invoiceDocuments)
-        .where(eq(invoiceDocuments.invoiceNo, invoiceNo))
+        .where(eq(invoiceDocuments.sphId, sphId))
         .limit(1);
-    }
 
-    const shouldHaveInvoice = isInvoiceEligibleSph(status);
+      if (!existingInvoice) {
+        [existingInvoice] = await tx
+          .select({
+            id: invoiceDocuments.id,
+            invoiceNo: invoiceDocuments.invoiceNo,
+          })
+          .from(invoiceDocuments)
+          .where(eq(invoiceDocuments.invoiceNo, invoiceNo))
+          .limit(1);
+      }
 
-    if (existingInvoice && !shouldHaveInvoice) {
-      await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
-      await db.delete(invoiceDocuments).where(eq(invoiceDocuments.id, existingInvoice.id));
-    } else if (existingInvoice) {
-      await db
-        .update(invoiceDocuments)
-        .set({
-          amountInWords: toRupiahWords(totalAmount),
-          customerDetailLine1: customer.detailLine1,
-          customerDetailLine2: customer.detailLine2,
-          customerDetailLine3: customer.detailLine3,
-          customerName: customer.name,
-          franco,
-          invoiceDate: sphDate,
-          invoiceNo,
-          paymentDueDate,
-          paymentTerm,
-          sphId,
-          totalAmount,
-        })
-        .where(eq(invoiceDocuments.id, existingInvoice.id));
+      const shouldHaveInvoice = isInvoiceEligibleSph(status);
 
-      await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
-      await db.insert(invoiceItems).values(
-        items.map((item) => ({
-          invoiceId: existingInvoice.id,
-          lineNo: item.lineNo,
-          partName: item.partName,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
-          totalPrice: item.totalPrice,
-          unitPrice: item.unitPrice,
-        }))
-      );
-    } else if (shouldHaveInvoice) {
-      const insertedInvoice = await db
-        .insert(invoiceDocuments)
-        .values({
-          amountInWords: toRupiahWords(totalAmount),
-          customerDetailLine1: customer.detailLine1,
-          customerDetailLine2: customer.detailLine2,
-          customerDetailLine3: customer.detailLine3,
-          customerName: customer.name,
-          franco,
-          invoiceDate: sphDate,
-          invoiceNo,
-          paymentDueDate,
-          paymentTerm,
-          sphId,
-          status: "pending",
-          totalAmount,
-        })
-        .returning({ id: invoiceDocuments.id });
+      if (existingInvoice && status === "menunggu_po_konfirmasi") {
+        // Retain the complete invoice and payments while PO confirmation is pending.
+      } else if (existingInvoice && !shouldHaveInvoice) {
+        await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
+        await tx.delete(invoiceDocuments).where(eq(invoiceDocuments.id, existingInvoice.id));
+      } else if (existingInvoice) {
+        await tx
+          .update(invoiceDocuments)
+          .set({
+            amountInWords: toRupiahWords(totalAmount),
+            customerDetailLine1: customer.detailLine1,
+            customerDetailLine2: customer.detailLine2,
+            customerDetailLine3: customer.detailLine3,
+            customerName: customer.name,
+            franco,
+            invoiceDate: sphDate,
+            invoiceNo,
+            paymentDueDate,
+            paymentTerm,
+            sphId,
+            totalAmount,
+          })
+          .where(eq(invoiceDocuments.id, existingInvoice.id));
 
-      await db.insert(invoiceItems).values(
-        items.map((item) => ({
-          invoiceId: insertedInvoice[0].id,
-          lineNo: item.lineNo,
-          partName: item.partName,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
-          totalPrice: item.totalPrice,
-          unitPrice: item.unitPrice,
-        }))
-      );
-    }
+        await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
+        await tx.insert(invoiceItems).values(
+          items.map((item) => ({
+            invoiceId: existingInvoice.id,
+            lineNo: item.lineNo,
+            partName: item.partName,
+            partNumber: item.partNumber,
+            quantity: item.quantity,
+            sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
+            totalPrice: item.totalPrice,
+            unitPrice: item.unitPrice,
+          }))
+        );
+      } else if (shouldHaveInvoice) {
+        const insertedInvoice = await tx
+          .insert(invoiceDocuments)
+          .values({
+            amountInWords: toRupiahWords(totalAmount),
+            customerDetailLine1: customer.detailLine1,
+            customerDetailLine2: customer.detailLine2,
+            customerDetailLine3: customer.detailLine3,
+            customerName: customer.name,
+            franco,
+            invoiceDate: sphDate,
+            invoiceNo,
+            paymentDueDate,
+            paymentTerm,
+            sphId,
+            status: "pending",
+            totalAmount,
+          })
+          .returning({ id: invoiceDocuments.id });
 
+        await tx.insert(invoiceItems).values(
+          items.map((item) => ({
+            invoiceId: insertedInvoice[0].id,
+            lineNo: item.lineNo,
+            partName: item.partName,
+            partNumber: item.partNumber,
+            quantity: item.quantity,
+            sphItemId: sphItemIdByLine.get(item.lineNo) ?? null,
+            totalPrice: item.totalPrice,
+            unitPrice: item.unitPrice,
+          }))
+        );
+      }
+
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath("/pengiriman");
     revalidatePath("/invoice");
     revalidatePath("/sph/list");
     revalidatePath(`/sph/edit/${sphId}`);

@@ -122,7 +122,7 @@ async function refreshSphStatuses(
       .where(eq(sphDocuments.id, sphId))
       .limit(1);
 
-    if (!document || ["cek_harga", "draft", "cancel", "cancelled"].includes(document.status)) {
+    if (!document || ["cek_harga", "draft", "menunggu_po_konfirmasi", "cancel", "cancelled"].includes(document.status)) {
       continue;
     }
 

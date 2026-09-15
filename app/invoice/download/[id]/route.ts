@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph } from "../../../sph/workflow";
 import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { invoiceDocuments, invoiceItems, sphDocuments } from "../../../../db/schema";
@@ -544,6 +545,7 @@ export async function GET(
       paymentTerm: invoiceDocuments.paymentTerm,
       poNo: invoiceDocuments.poNo,
       sphNo: sphDocuments.sphNo,
+      sphStatus: sphDocuments.status,
       totalAmount: invoiceDocuments.totalAmount,
     })
     .from(invoiceDocuments)
@@ -551,7 +553,7 @@ export async function GET(
     .where(eq(invoiceDocuments.id, id))
     .limit(1);
 
-  if (!document) {
+  if (!document || !document.sphStatus || !isInvoiceEligibleSph(document.sphStatus)) {
     return new Response("Invoice tidak ditemukan.", { status: 404 });
   }
 

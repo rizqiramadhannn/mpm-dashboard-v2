@@ -1,3 +1,5 @@
+import { approveSphPrice, confirmSphPo } from "../workflow-actions";
+import { isInvoiceEligibleSph } from "../workflow";
 import { ConfigurableTable, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
 import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -67,15 +69,12 @@ type InvoicePaymentRow = {
 
 const sphStatuses = [
   "cek_harga",
+  "menunggu_po_konfirmasi",
   "menunggu_pengiriman",
   "proses_pengiriman",
   "selesai",
   "cancel",
 ];
-
-function invoiceNoFromSph(sphNo: string) {
-  return sphNo.startsWith("SPH") ? `INV${sphNo.slice(3)}` : `INV-${sphNo}`;
-}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -108,6 +107,7 @@ function statusLabel(status: string) {
     cancel: "Cancel",
     cancelled: "Cancel",
     cek_harga: "Cek Harga",
+    menunggu_po_konfirmasi: "Menunggu PO / Konfirmasi",
     draft: "Cek Harga",
     invoiced: "Menunggu Pengiriman",
     menunggu_pengiriman: "Menunggu Pengiriman",
@@ -367,127 +367,22 @@ async function cancelSphAction(formData: FormData) {
 
 async function approveHargaAction(formData: FormData) {
   "use server";
-
   const user = await requireUser("/sph/list");
-  const idValue = formData.get("sphId");
+  const sphId = String(formData.get("sphId") ?? "").trim();
+  if (!sphId) throw new Error("SPH tidak valid.");
+  const result = await approveSphPrice(await getDb(), sphId);
+  if (result) await recordActivityLog({ action: "sph_price_approved", actor: user, details: { sphId, sphNo: result.sphNo } });
+  revalidatePath("/dashboard");
+  revalidatePath("/sph/list");
+}
 
-  if (typeof idValue !== "string" || idValue.trim() === "") {
-    throw new Error("SPH tidak valid.");
-  }
-
-  const sphId = idValue.trim();
-  const db = await getDb();
-  const [document] = await db
-    .select({
-      amountInWords: sphDocuments.amountInWords,
-      customerDetailLine1: sphDocuments.customerDetailLine1,
-      customerDetailLine2: sphDocuments.customerDetailLine2,
-      customerDetailLine3: sphDocuments.customerDetailLine3,
-      customerName: sphDocuments.customerName,
-      franco: sphDocuments.franco,
-      id: sphDocuments.id,
-      paymentDueDate: sphDocuments.paymentDueDate,
-      paymentTerm: sphDocuments.paymentTerm,
-      sphDate: sphDocuments.sphDate,
-      sphNo: sphDocuments.sphNo,
-      status: sphDocuments.status,
-      totalAmount: sphDocuments.totalAmount,
-    })
-    .from(sphDocuments)
-    .where(eq(sphDocuments.id, sphId))
-    .limit(1);
-
-  if (!document) {
-    throw new Error("SPH tidak ditemukan.");
-  }
-
-  if (normalizedStatus(document.status) === "cancel") {
-    throw new Error("SPH cancel tidak bisa di-approve.");
-  }
-
-  const items = await db
-    .select({
-      id: sphItems.id,
-      lineNo: sphItems.lineNo,
-      partName: sphItems.partName,
-      partNumber: sphItems.partNumber,
-      quantity: sphItems.quantity,
-      totalPrice: sphItems.totalPrice,
-      unitPrice: sphItems.unitPrice,
-    })
-    .from(sphItems)
-    .where(eq(sphItems.sphId, sphId));
-
-  if (items.length === 0) {
-    throw new Error("SPH belum memiliki item.");
-  }
-
-  const [existingInvoice] = await db
-    .select({ id: invoiceDocuments.id })
-    .from(invoiceDocuments)
-    .where(eq(invoiceDocuments.sphId, sphId))
-    .limit(1);
-
-  const invoiceValues = {
-    amountInWords: document.amountInWords,
-    customerDetailLine1: document.customerDetailLine1,
-    customerDetailLine2: document.customerDetailLine2,
-    customerDetailLine3: document.customerDetailLine3,
-    customerName: document.customerName,
-    franco: document.franco,
-    invoiceDate: document.sphDate,
-    invoiceNo: invoiceNoFromSph(document.sphNo),
-    paymentDueDate: document.paymentDueDate,
-    paymentTerm: document.paymentTerm,
-    sphId,
-    status: "pending" as const,
-    totalAmount: document.totalAmount,
-  };
-  const invoiceId = existingInvoice
-    ? existingInvoice.id
-    : (
-        await db
-          .insert(invoiceDocuments)
-          .values(invoiceValues)
-          .returning({ id: invoiceDocuments.id })
-      )[0].id;
-
-  if (existingInvoice) {
-    await db
-      .update(invoiceDocuments)
-      .set(invoiceValues)
-      .where(eq(invoiceDocuments.id, existingInvoice.id));
-    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
-  }
-
-  await db.insert(invoiceItems).values(
-    items.map((item) => ({
-      invoiceId,
-      lineNo: item.lineNo,
-      partName: item.partName,
-      partNumber: item.partNumber,
-      quantity: item.quantity,
-      sphItemId: item.id,
-      totalPrice: item.totalPrice,
-      unitPrice: item.unitPrice,
-    }))
-  );
-
-  await db
-    .update(sphDocuments)
-    .set({ status: "menunggu_pengiriman" })
-    .where(eq(sphDocuments.id, sphId));
-  await recordActivityLog({
-    action: existingInvoice ? "invoice_recreated_from_sph" : "invoice_created_from_sph",
-    actor: user,
-    details: {
-      invoiceId,
-      sphId,
-      sphNo: document.sphNo,
-      totalAmount: document.totalAmount,
-    },
-    targetUsername: document.customerName,
-  });
+async function confirmPoAction(formData: FormData) {
+  "use server";
+  const user = await requireUser("/sph/list");
+  const sphId = String(formData.get("sphId") ?? "").trim();
+  if (!sphId) throw new Error("SPH tidak valid.");
+  const result = await confirmSphPo(await getDb(), sphId);
+  if (result) await recordActivityLog({ action: "sph_po_confirmed", actor: user, details: { sphId, ...result }, targetUsername: result.customerName });
   revalidatePath("/dashboard");
   revalidatePath("/invoice");
   revalidatePath("/pengiriman");
@@ -776,7 +671,7 @@ export default async function ListSphPage({
   );
   const exportRows: SphExportRow[] = pageRows.flatMap((document) => {
     const items = itemsBySph.get(document.id) ?? [];
-    const invoice = invoiceBySph.get(document.id);
+    const invoice = isInvoiceEligibleSph(document.status) ? invoiceBySph.get(document.id) : undefined;
 
     return items.map((item) => {
       const journeys = journeysByItem.get(item.id) ?? [];
@@ -963,6 +858,7 @@ export default async function ListSphPage({
                   const items = itemsBySph.get(document.id) ?? [];
                   const status = normalizedStatus(document.status);
                   const isCekHarga = status === "cek_harga";
+                  const isWaitingPo = status === "menunggu_po_konfirmasi";
                   const isCancel = status === "cancel";
 
                   return (
@@ -1021,7 +917,7 @@ export default async function ListSphPage({
                           {isCekHarga ? (
                             <ConfirmForm
                               action={approveHargaAction}
-                              confirmMessage={`Approve harga SPH ${document.sphNo} dan buat invoice?`}
+                              confirmMessage={`Approve harga SPH ${document.sphNo} dan lanjut ke Menunggu PO / Konfirmasi?`}
                             >
                               <input name="sphId" type="hidden" value={document.id} />
                               <button
@@ -1030,6 +926,14 @@ export default async function ListSphPage({
                                 title="Approve Harga"
                                 type="submit"
                               >
+                                <CheckIcon />
+                              </button>
+                            </ConfirmForm>
+                          ) : null}
+                          {isWaitingPo ? (
+                            <ConfirmForm action={confirmPoAction} confirmMessage={`Konfirmasi PO SPH ${document.sphNo} dan aktifkan invoice?`}>
+                              <input name="sphId" type="hidden" value={document.id} />
+                              <button aria-label={`Konfirmasi PO ${document.sphNo}`} className="icon-action success" title="Konfirmasi PO" type="submit">
                                 <CheckIcon />
                               </button>
                             </ConfirmForm>

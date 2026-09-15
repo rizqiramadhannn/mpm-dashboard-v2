@@ -3080,3 +3080,9 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
     width: 100%;
   }
 }
+
+.status-badge.menunggu_po_konfirmasi {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}

@@ -99,3 +99,23 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+### SPH price approval and PO confirmation
+
+Approve Harga moves Cek Harga to Menunggu PO / Konfirmasi. Konfirmasi PO moves it
+to Menunggu Pengiriman and creates or reuses its invoice. Retained invoices and
+payments are excluded from active invoice views, dashboard invoice totals, and
+monthly credit usage while their SPH awaits PO confirmation.
+
+One-time status migration (run production only after the new main deployment is active):
+
+1. Run `node scripts/migrate-sph-po.mjs --preview development` and apply the returned backup with `node scripts/migrate-sph-po.mjs --apply development <backup.json>`.
+2. After rollout, run the same preview and apply commands with `production`.
+
+The preview saves the target IDs and affected data under ignored `backups/sph-po/`.
+Apply validates the database identity, checksum and unchanged preview data; changes
+only captured SPH statuses in one transaction; and verifies preservation of invoice,
+payment and shipment data. An applied marker prevents the same backup from being
+reapplied after a user confirms PO again. Keep backups and markers together.
+
+Run `npm run test:sph-workflow` for workflow and migration behavior tests.

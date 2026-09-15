@@ -20,7 +20,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern outputs --ignore-pattern tmp",
     "db:sync-dev": "node scripts/sync-dev-db.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "test:sph-workflow": "node --import ./tests/manual-note-loader.mjs --test tests/sph-workflow.test.mjs tests/sph-migration.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",

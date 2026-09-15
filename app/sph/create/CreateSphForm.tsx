@@ -48,6 +48,7 @@ export type SphFormState = {
 
 type SphStatus =
   | "cek_harga"
+  | "menunggu_po_konfirmasi"
   | "menunggu_pengiriman"
   | "proses_pengiriman"
   | "selesai"
@@ -55,6 +56,7 @@ type SphStatus =
 
 const sphStatusOptions: { label: string; value: SphStatus }[] = [
   { label: "Cek Harga", value: "cek_harga" },
+  { label: "Menunggu PO / Konfirmasi", value: "menunggu_po_konfirmasi" },
   { label: "Menunggu Pengiriman", value: "menunggu_pengiriman" },
   { label: "Proses Pengiriman", value: "proses_pengiriman" },
   { label: "Selesai", value: "selesai" },

@@ -1,9 +1,10 @@
+import { isInvoiceEligibleSph } from "../../sph/workflow";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../db";
-import { invoiceDocuments } from "../../../db/schema";
+import { invoiceDocuments, sphDocuments } from "../../../db/schema";
 import { getCurrentUser, recordActivityLog } from "../../auth";
 
 export const dynamic = "force-dynamic";
@@ -106,15 +107,17 @@ export async function PATCH(request: Request) {
     const db = await getDb();
     const [invoice] = await db
       .select({
+        sphStatus: sphDocuments.status,
         paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
         status: invoiceDocuments.status,
         totalAmount: invoiceDocuments.totalAmount,
       })
       .from(invoiceDocuments)
+      .innerJoin(sphDocuments, eq(invoiceDocuments.sphId, sphDocuments.id))
       .where(eq(invoiceDocuments.id, id))
       .limit(1);
 
-    if (!invoice) {
+    if (!invoice || !isInvoiceEligibleSph(invoice.sphStatus)) {
       return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
     }
 

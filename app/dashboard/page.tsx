@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph, normalizedSphStatus } from "../sph/workflow";
 import { requireRestrictedMenuUser } from "../auth";
 import type { CSSProperties } from "react";
 import { eq } from "drizzle-orm";
@@ -122,17 +123,6 @@ function isInvoiceCancelled(status: string) {
   return status === "cancelled";
 }
 
-function normalizedSphStatus(status: string) {
-  const aliases: Record<string, string> = {
-    cancelled: "cancel",
-    draft: "cek_harga",
-    invoiced: "menunggu_pengiriman",
-    pending_invoice: "menunggu_pengiriman",
-  };
-
-  return aliases[status] ?? status;
-}
-
 function isSupplierNoteCancelled(status: string) {
   return status === "CANCELLED";
 }
@@ -247,7 +237,7 @@ async function getDashboardData() {
         .from(sphItems),
     ]);
 
-  const validSphIds = new Set(sphRows.map((sph) => sph.id));
+  const validSphIds = new Set(sphRows.filter((sph) => isInvoiceEligibleSph(sph.status)).map((sph) => sph.id));
   const invoices = rawInvoices.filter((invoice) => validSphIds.has(invoice.sphId));
   const sphIdByItem = new Map(sphItemRows.map((item) => [item.id, item.sphId]));
   const sphByInternalId = new Map(sphRows.map((sph) => [sph.id, sph]));

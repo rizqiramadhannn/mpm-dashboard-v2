@@ -1,3 +1,4 @@
+import { isInvoiceEligibleSph } from "../../sph/workflow";
 import { eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
@@ -80,6 +81,10 @@ async function updateShipmentJourneyAction(formData: FormData) {
 
   if (!document) {
     throw new Error("SPH tidak ditemukan.");
+  }
+
+  if (!document || !isInvoiceEligibleSph(document.status)) {
+    throw new Error("Konfirmasi PO SPH terlebih dahulu sebelum mengatur pengiriman.");
   }
 
   const itemRows = await db
@@ -251,7 +256,7 @@ async function updateShipmentJourneyAction(formData: FormData) {
   );
   const currentStatus = document.status;
 
-  if (!["cek_harga", "draft", "cancel", "cancelled"].includes(currentStatus)) {
+  if (!["cek_harga", "draft", "menunggu_po_konfirmasi", "cancel", "cancelled"].includes(currentStatus)) {
     const nextStatus = isComplete
       ? "selesai"
       : hasShipmentData
