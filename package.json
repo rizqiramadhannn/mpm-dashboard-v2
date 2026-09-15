@@ -6,11 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "predev": "npm run db:sync-dev",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "previnext:dev": "npm run db:sync-dev",
     "vinext:dev": "vinext dev",
     "vinext:build": "vinext build",
     "vinext:start": "vinext start",
@@ -19,6 +17,7 @@
     "test:table-columns": "node --import ./tests/manual-note-loader.mjs --test tests/table-preferences.test.mjs tests/table-columns.browser.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern outputs --ignore-pattern tmp",
     "db:sync-dev": "node scripts/sync-dev-db.mjs",
+    "test:supplier-api-auth": "node --test tests/supplier-notes-api-auth.test.mjs tests/supplier-notes-api-client.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test:sph-workflow": "node --import ./tests/manual-note-loader.mjs --test tests/sph-workflow.test.mjs tests/sph-migration.test.mjs"

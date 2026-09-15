@@ -1,0 +1,45 @@
+# Supplier-note automation API
+
+Browser login is unchanged. Automation uses a separate Bearer credential, not a
+browser cookie. Disabled by default; missing/invalid/expired configuration fails closed.
+
+Configure on the deployed server:
+
+- `SUPPLIER_NOTES_API_TOKEN_SHA256`: SHA-256 hex digest of a cryptographically random token.
+- `SUPPLIER_NOTES_API_TOKEN_EXPIRES_AT`: explicit ISO-8601 UTC expiry.
+
+Generate at least 32 random bytes encoded as base64url (43 characters); keep the
+raw token only in a protected local secret/environment, never Git, chat, logs or
+client-side NEXT_PUBLIC variables. Set `SUPPLIER_NOTES_API_TOKEN` in the local
+automation process. Set `SUPPLIER_NOTES_API_BASE_URL` to the deployed HTTPS origin
+(default: the Vercel production origin). Rotate by replacing the server hash and
+client token. Revoke immediately by removing the server hash or expiring it.
+This is a service credential: it can read all supplier notes and create notes,
+including automatic supplier creation; issue only to the approved automation.
+
+Allowed scope:
+
+- GET/POST `/api/supplier-notes`
+- GET `/api/supplier-notes/masters` (names, IDs, codes and terms only)
+- GET `/supplier/nota-supplier/download/<id>` for file verification
+
+PATCH, DELETE, pending imports, Finance, admin and other pages/APIs are denied.
+Bearer failures never fall back to a browser cookie. Do not grant public access.
+
+```powershell
+node scripts/supplier-notes-api.mjs masters
+node scripts/supplier-notes-api.mjs list
+# Only after the final reviewed payload and original file are approved:
+node scripts/supplier-notes-api.mjs upload approved-payload.json original.pdf --confirmed
+```
+
+Before upload, verify source SHA-256 against the approved review. The client
+checks existing supplier+number and sends one multipart POST without retries.
+It prints only the resulting ID with `uploaded-unverified`. Persist the ID,
+GET-check all values/items, and download/hash-check the original before marking
+verified. Timeout/error requires reconciliation; note+items are not atomic.
+Redirects are refused so the token is never forwarded to external file hosts.
+
+Production activation requires deploying this code and setting both server
+variables; local changes do not activate the Vercel endpoint. No new database
+schema or authentication-secret reuse is required.

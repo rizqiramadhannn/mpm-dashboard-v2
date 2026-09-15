@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isSupplierNotesApiScope, validateSupplierNotesApiToken } from "./app/supplier-notes-api-auth";
 
 const SESSION_COOKIE = "mpm_session";
 const LOCAL_AUTH_SECRET = "mpm-dashboard-local-auth-secret-change-me";
@@ -14,6 +15,22 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // A presented automation credential must pass both checks. Never fall back
+  // to cookies for an invalid/out-of-scope Bearer request.
+  const authorization = request.headers.get("authorization");
+  if (authorization !== null) {
+    const valid = await validateSupplierNotesApiToken(
+      authorization,
+      process.env.SUPPLIER_NOTES_API_TOKEN_SHA256,
+      process.env.SUPPLIER_NOTES_API_TOKEN_EXPIRES_AT,
+    );
+    if (!valid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isSupplierNotesApiScope(pathname, request.method)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     return NextResponse.next();
   }
 
