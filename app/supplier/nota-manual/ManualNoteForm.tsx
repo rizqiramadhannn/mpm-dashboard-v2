@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import { rupiah } from "./model";
 import { SupplierPicker } from "./SupplierPicker";
 
-type Row = { key: number; description: string; quantity: string; unitPrice: string };
-const emptyRow = (key: number): Row => ({ key, description: "", quantity: "1", unitPrice: "" });
+type Row = { key: number; description: string; quantity: string; uom: string; unitPrice: string };
+const emptyRow = (key: number): Row => ({ key, description: "", quantity: "1", uom: "Pcs", unitPrice: "" });
 
 export function ManualNoteForm({ suppliers, customers, defaultDate }: { suppliers: { id: string; name: string }[]; customers: { id: string; name: string; code: string }[]; defaultDate: string }) {
   const router = useRouter();
@@ -39,7 +39,7 @@ export function ManualNoteForm({ suppliers, customers, defaultDate }: { supplier
     locked.current = true; setBusy(true); setUncertain(true); setError(""); setCreated(null);
     requestKey.current ||= crypto.randomUUID();
     try {
-      const response = await fetch("/supplier/nota-manual/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteDate, supplierId, purchasePurpose, customerId, idempotencyKey: requestKey.current, items: rows.map(row => ({ description: row.description, quantity: Number(row.quantity), unitPrice: Number(row.unitPrice) })) }) });
+      const response = await fetch("/supplier/nota-manual/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ noteDate, supplierId, purchasePurpose, customerId, idempotencyKey: requestKey.current, items: rows.map(row => ({ description: row.description, quantity: Number(row.quantity), uom: row.uom, unitPrice: Number(row.unitPrice) })) }) });
       if (response.redirected) throw new Error("Sesi berakhir. Login kembali lalu coba request yang sama.");
       const body = await response.json();
       if (!response.ok) {
@@ -108,8 +108,12 @@ export function ManualNoteForm({ suppliers, customers, defaultDate }: { supplier
                   <textarea aria-label={`Deskripsi item ${i + 1}`} required maxLength={600} rows={2} placeholder="Contoh: Pompa steering" value={row.description} onChange={event => update(row.key, "description", event.target.value)} />
                 </label>
                 <label>
-                  <span>Qty (Pcs) <span className="manual-required">*</span></span>
+                  <span>Qty <span className="manual-required">*</span></span>
                   <input aria-label={`Qty item ${i + 1}`} required type="number" min="0.000001" max="1000000" step="any" value={row.quantity} onChange={event => update(row.key, "quantity", event.target.value)} />
+                </label>
+                <label>
+                  <span>Satuan</span>
+                  <select aria-label={`Satuan item ${i + 1}`} value={row.uom} onChange={event => update(row.key, "uom", event.target.value)}><option value="Pcs">Pcs</option><option value="Set">Set</option></select>
                 </label>
                 <label>
                   <span>Harga satuan (Rp) <span className="manual-required">*</span></span>

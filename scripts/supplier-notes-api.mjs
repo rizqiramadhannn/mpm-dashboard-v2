@@ -29,6 +29,15 @@ async function main() {
   const [command, payloadPath, invoicePath, confirmation] = process.argv.slice(2);
   const base = process.env.SUPPLIER_NOTES_API_BASE_URL || "https://mpm-dashboard-v2.vercel.app";
   const token = process.env.SUPPLIER_NOTES_API_TOKEN;
+  if (command === "manual" || command === "create-supplier") {
+    if (!payloadPath || invoicePath !== "--confirmed") throw new Error("Usage: manual|create-supplier payload.json --confirmed (only for authorized input).");
+    const payload = JSON.parse(await readFile(payloadPath, "utf8"));
+    const path = command === "manual" ? "/api/supplier-notes/manual" : "/api/supplier-notes/masters";
+    const response = await apiRequest(base, token, path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const { data } = await response.json();
+    console.log(JSON.stringify({ status: "created-unverified", id: data.id, noteNo: data.noteNo, name: data.name, reused: data.reused }));
+    return;
+  }
   if (command === "masters") {
     const response = await apiRequest(base, token, "/api/supplier-notes/masters");
     console.log(JSON.stringify(await response.json(), null, 2));

@@ -1,4 +1,4 @@
-export type ManualItem = { description: string; quantity: number; unitPrice: number; totalPrice: number };
+export type ManualItem = { description: string; quantity: number; unitPrice: number; uom?: string; totalPrice: number };
 export type ManualNoteInput = { noteDate: string; supplierId: string; purchasePurpose: "Stock" | "Pembelian Langsung"; customerId: string; idempotencyKey: string; items: ManualItem[]; amount: number };
 
 export class ManualNoteError extends Error {
@@ -27,13 +27,15 @@ export function validateManualNote(value: unknown): ManualNoteInput {
     const item = raw as Record<string, unknown>;
     const description = typeof item.description === "string" ? item.description.trim() : "";
     if (!description || description.length > 600) throw new ManualNoteError(`Deskripsi item ${index + 1} wajib diisi, maksimal 600 karakter.`);
+    const uom = item.uom === undefined ? "Pcs" : typeof item.uom === "string" ? item.uom.trim() : "";
+    if (!["Pcs", "Set"].includes(uom)) throw new ManualNoteError(`Satuan item ${index + 1} harus Pcs atau Set.`);
     const quantity = item.quantity;
     const unitPrice = item.unitPrice;
     if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000) throw new ManualNoteError(`Qty item ${index + 1} harus positif, maksimal 1.000.000.`);
     if (typeof unitPrice !== "number" || !Number.isSafeInteger(unitPrice) || unitPrice < 0) throw new ManualNoteError(`Harga item ${index + 1} harus bilangan bulat rupiah nonnegatif.`);
     const totalPrice = Math.round(quantity * unitPrice);
     if (!Number.isSafeInteger(totalPrice)) throw new ManualNoteError(`Total item ${index + 1} terlalu besar.`);
-    return { description, quantity, unitPrice, totalPrice };
+    return { description, quantity, unitPrice, totalPrice, uom };
   });
   const amount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   if (!Number.isSafeInteger(amount)) throw new ManualNoteError("Total nota terlalu besar.");

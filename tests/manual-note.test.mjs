@@ -11,9 +11,41 @@ import * as schema from "../db/schema.ts";
 import { createManualNote, listManualNotes } from "../app/supplier/nota-manual/storage.ts";
 import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manual/model.ts";
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
+import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
+
+test("API actor, Set persistence/PDF and idempotent replay", () => fixture(async ([db], client) => {
+  const apiActor = { id: null, username: "supplier-notes-api", ipAddress: "unknown" };
+  const input = payload({ items: [{ description: "BEARING RODA DEPAN", quantity: 2, unitPrice: 300000, uom: "Set" }] });
+  const note = await createManualNote(db, input, apiActor);
+  assert.equal((await createManualNote(db, input, apiActor)).id, note.id);
+  const item = (await client.execute("SELECT uom, total_price FROM supplier_note_items")).rows[0];
+  assert.equal(item.uom, "Set"); assert.equal(item.total_price, 600000);
+  const row = (await client.execute("SELECT invoice_file_base64 FROM supplier_notes")).rows[0];
+  assert.match(Buffer.from(row.invoice_file_base64, "base64").toString("latin1"), /2 SET/);
+  await assert.rejects(createManualNote(db, { ...input, items: [{ ...input.items[0], uom: "Pcs" }] }, apiActor), /data berbeda/);
+  assert.throws(() => validateManualNote(payload({ items: [{ ...input.items[0], uom: "bad" }] })), /Satuan/);
+}));
+
+test("API supplier creation reuses normalized names and records one audit", () => fixture(async ([db], client) => {
+  const first = await createApiSupplier(db, { name: "SANGMANE" }, "unknown");
+  const second = await createApiSupplier(db, { name: "  Sangmane  " }, "unknown");
+  assert.equal(first.id, second.id); assert.equal(second.reused, true);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs")).rows[0].n, 1);
+  await assert.rejects(createApiSupplier(db, { name: "" }, "unknown"), /Nama supplier/);
+}));
+
+test("explicit Pcs can replay a legacy manual request hash", () => fixture(async ([db], client) => {
+  const input = payload();
+  const data = validateManualNote(input);
+  const { createHash } = await import("node:crypto");
+  const legacyHash = createHash("sha256").update(JSON.stringify({ noteDate: data.noteDate, supplierId: data.supplierId, purchasePurpose: data.purchasePurpose, customerId: data.customerId, items: data.items.map(item => ({ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.totalPrice })) })).digest("hex");
+  const note = await createManualNote(db, input, actor);
+  await client.execute({ sql: "UPDATE supplier_notes SET manual_payload_hash = ? WHERE id = ?", args: [legacyHash, note.id] });
+  assert.equal((await createManualNote(db, { ...input, items: input.items.map(item => ({ ...item, uom: "Pcs" })) }, actor)).id, note.id);
+}));
 
 async function fixture(run) {
   const dir = await mkdtemp(join(tmpdir(), "mpm-manual-test-"));
@@ -40,6 +72,7 @@ async function fixture(run) {
       await client.execute(`CREATE TABLE "${config.name}" (${columns.join(", ")})`);
     }
     await client.execute("CREATE UNIQUE INDEX supplier_notes_supplier_note_no_idx ON supplier_notes(supplier_id, note_no)");
+    await client.execute("CREATE UNIQUE INDEX suppliers_normalized_name_idx ON suppliers(normalized_name)");
     const migration = await readFile(new URL("../drizzle/0038_supplier_manual_notes.sql", import.meta.url), "utf8");
     await client.executeMultiple(migration.replaceAll("--> statement-breakpoint", ""));
     const dbs = clients.map(client => drizzle(client, { schema }));

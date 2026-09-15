@@ -21,6 +21,11 @@ Allowed scope:
 
 - GET/POST `/api/supplier-notes`
 - GET `/api/supplier-notes/masters` (names, IDs, codes and terms only)
+- POST `/api/supplier-notes/masters` with `{ "name": "Supplier name" }`
+  for an explicitly authorized new supplier; normalized existing names are reused.
+- POST `/api/supplier-notes/manual` with `noteDate`, `supplierId`,
+  `purchasePurpose`, `customerId`, `idempotencyKey` and `items` containing
+  `description`, `quantity`, `unitPrice` and optional `uom` (`Pcs` or `Set`).
 - GET `/supplier/nota-supplier/download/<id>` for file verification
 
 PATCH, DELETE, pending imports, Finance, admin and other pages/APIs are denied.
@@ -31,6 +36,8 @@ node scripts/supplier-notes-api.mjs masters
 node scripts/supplier-notes-api.mjs list
 # Only after the final reviewed payload and original file are approved:
 node scripts/supplier-notes-api.mjs upload approved-payload.json original.pdf --confirmed
+node scripts/supplier-notes-api.mjs create-supplier supplier.json --confirmed
+node scripts/supplier-notes-api.mjs manual manual-payload.json --confirmed
 ```
 
 Before upload, verify source SHA-256 against the approved review. The client
@@ -39,6 +46,16 @@ It prints only the resulting ID with `uploaded-unverified`. Persist the ID,
 GET-check all values/items, and download/hash-check the original before marking
 verified. Timeout/error requires reconciliation; note+items are not atomic.
 Redirects are refused so the token is never forwarded to external file hosts.
+
+Manual notes calculate item totals on the server and generate the NM number/PDF
+atomically with note, items and audit. The API actor uses a stable
+`supplier-notes-api` idempotency namespace with a null audit user ID; no browser
+user is created. Persist a unique key before the first POST and reuse the exact
+payload/key only when reconciling an uncertain outcome. Changing the payload
+with the same key returns 409. Bulk consists of sequential one-note requests;
+the entire batch is not atomic. Verify GET values/items and generated PDF
+contents before reporting success. Original-file hash comparison applies to
+uploaded invoices, not generated manual PDFs.
 
 Production activation requires deploying this code and setting both server
 variables; local changes do not activate the Vercel endpoint. No new database

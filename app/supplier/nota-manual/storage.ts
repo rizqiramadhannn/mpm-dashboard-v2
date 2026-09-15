@@ -5,7 +5,7 @@ import { ManualNoteError, manualNoteNumber, validateManualNote } from "./model";
 import { generateManualNotePdf } from "./pdf";
 
 type Db = Awaited<ReturnType<typeof getDb>>;
-type Actor = { id: string; username: string; ipAddress: string };
+type Actor = { id: string | null; username: string; ipAddress: string };
 function base64(bytes: Uint8Array) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -21,8 +21,10 @@ function result(note: { id: string; noteNo: string }, reused: boolean) {
 
 export async function createManualNote(db: Db, value: unknown, actor: Actor, render = generateManualNotePdf) {
   const input = validateManualNote(value);
-  const key = `${actor.id}:${input.idempotencyKey}`;
-  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, purchasePurpose: input.purchasePurpose, customerId: input.customerId, items: input.items })));
+  const key = `${actor.id ?? "supplier-notes-api"}:${input.idempotencyKey}`;
+  // Preserve legacy hashes for Pcs-only requests; Set remains part of identity.
+  const hashItems = input.items.map(({ uom, ...item }) => uom === "Pcs" || !uom ? item : { ...item, uom });
+  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, purchasePurpose: input.purchasePurpose, customerId: input.customerId, items: hashItems })));
   const save = () => db.transaction(async tx => {
     // Acquire the write lock before looking up idempotency. All concurrent
     // writers serialize here, including retries with the same request key.
@@ -60,7 +62,7 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
       sourceFileName: fileName, sourceFileMimeType: "application/pdf", sourceFileSize: pdf.length, sourceFileBase64: fileBase64, sourceFileSha256: sha256,
       invoiceFileName: fileName, invoiceFileMimeType: "application/pdf", invoiceFileSize: pdf.length, invoiceFileBase64: fileBase64, invoiceFileSha256: sha256,
     }).returning({ id: supplierNotes.id, noteNo: supplierNotes.noteNo });
-    await tx.insert(supplierNoteItems).values(input.items.map((item, i) => ({ ...item, supplierNoteId: note.id, lineNo: i + 1, uom: "Pcs", flag: "MPM" })));
+    await tx.insert(supplierNoteItems).values(input.items.map((item, i) => ({ ...item, supplierNoteId: note.id, lineNo: i + 1, uom: item.uom ?? "Pcs", flag: "MPM" })));
     // Same audit table and action convention as recordActivityLog, but inside
     // the transaction: audit failures cannot cause a committed-but-failed reply.
     await tx.insert(appAdminAuditLogs).values({ actorUserId: actor.id, actorUsername: actor.username, ipAddress: actor.ipAddress, action: "supplier_manual_note_create", detailsJson: { id: note.id, noteNo, supplierId: supplier.id, itemCount: input.items.length, amount: input.amount } });

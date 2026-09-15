@@ -83,7 +83,7 @@ export function generateManualNotePdf(note: { noteNo: string; noteDate: string; 
   newPage();
   for (let index = 0; index < note.items.length; index++) {
     const item = note.items[index];
-    const rows = wrap(`${item.description} ${new Intl.NumberFormat("id-ID").format(item.quantity)} PCS`, 314);
+    const rows = wrap(`${item.description} ${new Intl.NumberFormat("id-ID").format(item.quantity)} ${(item.uom ?? "Pcs").toUpperCase()}`, 314);
     // Split exceptionally long descriptions over pages instead of shrinking text.
     let offset = 0;
     while (offset < rows.length) {

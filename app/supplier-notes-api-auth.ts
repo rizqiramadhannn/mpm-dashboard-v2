@@ -1,7 +1,8 @@
 /** A separate, revocable automation credential; never a browser session. */
 export function isSupplierNotesApiScope(pathname: string, method: string) {
   if (pathname === "/api/supplier-notes") return method === "GET" || method === "POST";
-  if (pathname === "/api/supplier-notes/masters") return method === "GET";
+  if (pathname === "/api/supplier-notes/masters") return method === "GET" || method === "POST";
+  if (pathname === "/api/supplier-notes/manual") return method === "POST";
   return method === "GET" && /^\/supplier\/nota-supplier\/download\/[^/]+$/.test(pathname);
 }
 
