@@ -1,3 +1,4 @@
+import { getInvoiceOmset, calculateOmsetBonus } from "../app/employee/bonus.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, mkdtemp, rm } from "node:fs/promises";
@@ -159,4 +160,31 @@ test("saved applied marker prevents moving a reconfirmed SPH on rerun", async t 
   await confirmSphPo(db, "once");
   assert.equal((await applySphPoOnce(client, baseline, marker, "fixture-checksum")).skipped, true);
   assert.equal(await status("once"), "menunggu_pengiriman");
+});
+
+test("payroll turnover excludes hidden, cancelled and orphan invoices and uses previous invoice month", async t => {
+  const { db, seed } = await fixture(t);
+  for (const id of ["active-payroll", "waiting-payroll", "cancelled-payroll", "draft-payroll", "outside-payroll"]) {
+    await seed(id, "menunggu_po_konfirmasi");
+    await confirmSphPo(db, id);
+  }
+  await db.update(schema.sphDocuments).set({ status: "menunggu_po_konfirmasi" }).where(eq(schema.sphDocuments.id, "waiting-payroll"));
+  await db.update(schema.sphDocuments).set({ status: "cek_harga" }).where(eq(schema.sphDocuments.id, "draft-payroll"));
+  await db.update(schema.invoiceDocuments).set({ status: "cancelled" }).where(eq(schema.invoiceDocuments.sphId, "cancelled-payroll"));
+  await db.update(schema.invoiceDocuments).set({ invoiceDate: "2026-08-31" }).where(eq(schema.invoiceDocuments.sphId, "outside-payroll"));
+  await db.insert(schema.invoiceDocuments).values({ id: "orphan", sphId: "missing-sph", invoiceNo: "INV-orphan", customerName: "Orphan", invoiceDate: "2026-09-15", totalAmount: 99999 });
+  assert.equal(await getInvoiceOmset(db, "2026-10"), 1000);
+  assert.equal(await getInvoiceOmset(db, "2026-09"), 1000);
+  await db.update(schema.invoiceDocuments).set({ paidAmount: 1000, status: "done" }).where(eq(schema.invoiceDocuments.sphId, "active-payroll"));
+  assert.equal(await getInvoiceOmset(db, "2026-10"), 1000);
+  await confirmSphPo(db, "waiting-payroll");
+  assert.equal(await getInvoiceOmset(db, "2026-10"), 2000);
+});
+
+test("bonus keeps one percent divided by four, rounded and capped at one million", () => {
+  assert.equal(calculateOmsetBonus(0), 0);
+  assert.equal(calculateOmsetBonus(170497000), 426243);
+  assert.equal(calculateOmsetBonus(149302000), 373255);
+  assert.equal(calculateOmsetBonus(400000000), 1000000);
+  assert.equal(calculateOmsetBonus(900000000), 1000000);
 });

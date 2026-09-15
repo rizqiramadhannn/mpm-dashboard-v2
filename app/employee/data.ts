@@ -1,11 +1,12 @@
-import { and, asc, desc, eq, gte, lt, ne } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
-import { employees, employeeSalaryPayments, invoiceDocuments } from "../../db/schema";
+import { employees, employeeSalaryPayments } from "../../db/schema";
 import { recordActivityLog, requireSuperadmin } from "../auth";
 
-const MAX_OMSET_BONUS = 1_000_000;
+import { calculateOmsetBonus, getInvoiceOmset } from "./bonus";
+export { calculateOmsetBonus } from "./bonus";
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -84,41 +85,9 @@ export function isSalaryDue(salaryMonth = getCurrentSalaryMonth(), dateKey = get
   return dateKey >= getSalaryDueDate(salaryMonth);
 }
 
-function previousMonthRange(salaryMonth: string) {
-  const [year, month] = salaryMonth.split("-").map(Number);
-  const previousMonth = month === 1 ? 12 : month - 1;
-  const previousYear = month === 1 ? year - 1 : year;
-  const nextMonth = previousMonth === 12 ? 1 : previousMonth + 1;
-  const nextYear = previousMonth === 12 ? previousYear + 1 : previousYear;
-
-  return {
-    from: `${previousYear}-${String(previousMonth).padStart(2, "0")}-01`,
-    to: `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`,
-  };
-}
-
 export async function getInvoiceOmsetForSalaryMonth(salaryMonth: string) {
   await requireSuperadmin("/employee/employee-list");
-  const db = await getDb();
-  const range = previousMonthRange(salaryMonth);
-  const rows = await db
-    .select({
-      totalAmount: invoiceDocuments.totalAmount,
-    })
-    .from(invoiceDocuments)
-    .where(
-      and(
-        gte(invoiceDocuments.invoiceDate, range.from),
-        lt(invoiceDocuments.invoiceDate, range.to),
-        ne(invoiceDocuments.status, "cancelled")
-      )
-    );
-
-  return rows.reduce((sum, row) => sum + row.totalAmount, 0);
-}
-
-export function calculateOmsetBonus(omset: number) {
-  return Math.min(MAX_OMSET_BONUS, Math.round((omset * 0.01) / 4));
+  return getInvoiceOmset(await getDb(), salaryMonth);
 }
 
 export async function getBonusOmsetForSalaryMonth(salaryMonth: string) {
