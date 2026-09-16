@@ -64,6 +64,17 @@ test("explicit Pcs can replay a legacy manual request hash", () => fixture(async
   assert.equal((await createManualNote(db, { ...input, items: input.items.map(item => ({ ...item, uom: "Pcs" })) }, actor)).id, note.id);
 }));
 
+test("settlement moves direct purchases to Stock only when explicitly requested", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload({purchasePurpose:'Pembelian Langsung',customerId:'customer-1'}), actor);
+  await assert.rejects(settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,purchasePurpose:'invalid'}, 'unknown'), /Perubahan tujuan/);
+  await settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown');
+  const read = async () => (await client.execute({sql:'SELECT purchase_purpose,customer_name FROM supplier_notes WHERE id=?',args:[note.id]})).rows[0];
+  assert.equal((await read()).purchase_purpose, 'Pembelian Langsung');
+  await settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:4000000,purchasePurpose:'Stock'}, 'unknown');
+  assert.deepEqual([ (await read()).purchase_purpose, (await read()).customer_name ], ['Stock','']);
+  assert.equal((await settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,purchasePurpose:'Stock'}, 'unknown')).reused, true);
+}));
+
 test("manual payments persist status/date and participate in idempotency", () => fixture(async ([db], client) => {
   const input = payload({ paidAmount: 4000000, paymentDate: "2026-09-12" });
   const note = await createManualNote(db, input, actor);

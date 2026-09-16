@@ -36,6 +36,8 @@ Allowed scope:
   `expectedPaidAmount` from the final review. It marks the total paid, preserves
   date/items/PDF, records audit atomically, reuses already-settled results and
   rejects changed amounts with 409. It cannot modify uploaded supplier invoices.
+  Optional `purchasePurpose: "Stock"` moves the note to Stock and clears its
+  customer only when explicitly requested; omission preserves the existing purpose.
 
 PATCH, DELETE, pending imports, Finance, admin and other pages/APIs are denied.
 Bearer failures never fall back to a browser cookie. Do not grant public access.
