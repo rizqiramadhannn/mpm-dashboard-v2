@@ -22,6 +22,14 @@ function textMatches(value: unknown, query: string) {
   return String(value ?? "").toLowerCase().includes(query);
 }
 
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("id-ID", {
+    currency: "IDR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(value);
+}
+
 function isWithinDateRange(value: string | null, from: string, to: string) {
   if (!value) {
     return !from && !to;
@@ -84,6 +92,16 @@ export default async function SupplierNotesPage({
     return matchesQuery && matchesPayment && matchesFlag && matchesDate;
   });
   const { pageRows, safePage } = paginateRows(filteredNotes, getCurrentPage(params));
+  const totals = filteredNotes.reduce(
+    (summary, note) => {
+      if (note.paymentStatus === "LUNAS") {
+        summary.paid += note.amount;
+      }
+      summary.unpaid += note.remainingPayment;
+      return summary;
+    },
+    { paid: 0, unpaid: 0 }
+  );
 
   return (
     <AppShell>
@@ -94,6 +112,21 @@ export default async function SupplierNotesPage({
             <h1>List Nota Supplier</h1>
           </div>
           <SupplierNoteImportControls customers={customers} suppliers={suppliers} />
+        </div>
+
+        <div className="invoice-summary" aria-label="Ringkasan nota supplier sesuai filter">
+          <div>
+            <span>Total Transaksi</span>
+            <strong>{filteredNotes.length}</strong>
+          </div>
+          <div>
+            <span>Total Lunas</span>
+            <strong>{formatMoney(totals.paid)}</strong>
+          </div>
+          <div>
+            <span>Belum Bayar</span>
+            <strong>{formatMoney(totals.unpaid)}</strong>
+          </div>
         </div>
 
         <form className="table-filter-bar">
