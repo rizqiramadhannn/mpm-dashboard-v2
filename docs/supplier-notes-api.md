@@ -31,6 +31,11 @@ Allowed scope:
   calculates BELUM BAYAR/DP/LUNAS and remaining payment. Payment values are
   part of idempotency identity; omitted payments retain legacy unpaid hashes.
 - GET `/supplier/nota-supplier/download/<id>` for file verification
+- POST `/api/supplier-notes/manual/<id>/settle` for an explicitly authorized
+  settlement of an existing manual note, with `expectedAmount` and
+  `expectedPaidAmount` from the final review. It marks the total paid, preserves
+  date/items/PDF, records audit atomically, reuses already-settled results and
+  rejects changed amounts with 409. It cannot modify uploaded supplier invoices.
 
 PATCH, DELETE, pending imports, Finance, admin and other pages/APIs are denied.
 Bearer failures never fall back to a browser cookie. Do not grant public access.

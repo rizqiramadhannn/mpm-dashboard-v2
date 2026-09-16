@@ -12,9 +12,26 @@ import { createManualNote, listManualNotes } from "../app/supplier/nota-manual/s
 import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manual/model.ts";
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
 import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.ts";
+import { settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
+
+test("settlement protects reviewed amounts, reuses paid result and preserves note/PDF", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload(), actor);
+  const read = async () => (await client.execute({ sql: "SELECT note_no, note_date, invoice_file_sha256, paid_amount FROM supplier_notes WHERE id=?", args:[note.id] })).rows[0];
+  const before = await read();
+  await assert.rejects(settleManualNote(db, note.id, {expectedAmount:1,expectedPaidAmount:0}, 'unknown'), /Total berubah/);
+  await assert.rejects(settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:1}, 'unknown'), /Pembayaran berubah/);
+  const result = await settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown');
+  assert.equal(result.paymentStatus, 'LUNAS'); assert.equal(result.paidAmount, 4000000);
+  assert.equal((await settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown')).reused, true);
+  const after = await read();
+  assert.deepEqual([after.note_no,after.note_date,after.invoice_file_sha256], [before.note_no,before.note_date,before.invoice_file_sha256]);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_manual_note_settled'")).rows[0].n, 1);
+  await client.execute({sql:"UPDATE supplier_notes SET note_source='supplier' WHERE id=?",args:[note.id]});
+  await assert.rejects(settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown'), /tidak ditemukan/);
+}));
 
 test("API actor, Set persistence/PDF and idempotent replay", () => fixture(async ([db], client) => {
   const apiActor = { id: null, username: "supplier-notes-api", ipAddress: "unknown" };

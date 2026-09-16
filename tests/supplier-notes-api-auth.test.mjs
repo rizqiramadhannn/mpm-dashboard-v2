@@ -13,6 +13,7 @@ test("automation scope only permits nota GET/POST, masters GET/POST, manual POST
     ["/api/supplier-notes", ["GET", "POST"]],
     ["/api/supplier-notes/masters", ["GET", "POST"]],
     ["/api/supplier-notes/manual", ["POST"]],
+    ["/api/supplier-notes/manual/id_123/settle", ["POST"]],
     ["/supplier/nota-supplier/download/id_123", ["GET"]],
   ]) {
     for (const method of ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"]) {
