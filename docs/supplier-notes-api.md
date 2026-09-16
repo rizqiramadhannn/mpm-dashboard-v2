@@ -26,6 +26,10 @@ Allowed scope:
 - POST `/api/supplier-notes/manual` with `noteDate`, `supplierId`,
   `purchasePurpose`, `customerId`, `idempotencyKey` and `items` containing
   `description`, `quantity`, `unitPrice` and optional `uom` (`Pcs` or `Set`).
+  Optional `paidAmount` is an integer from 0 to the calculated total;
+  `paymentDate` is an optional valid date for nonzero payments. The server
+  calculates BELUM BAYAR/DP/LUNAS and remaining payment. Payment values are
+  part of idempotency identity; omitted payments retain legacy unpaid hashes.
 - GET `/supplier/nota-supplier/download/<id>` for file verification
 
 PATCH, DELETE, pending imports, Finance, admin and other pages/APIs are denied.

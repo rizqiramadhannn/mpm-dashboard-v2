@@ -47,6 +47,20 @@ test("explicit Pcs can replay a legacy manual request hash", () => fixture(async
   assert.equal((await createManualNote(db, { ...input, items: input.items.map(item => ({ ...item, uom: "Pcs" })) }, actor)).id, note.id);
 }));
 
+test("manual payments persist status/date and participate in idempotency", () => fixture(async ([db], client) => {
+  const input = payload({ paidAmount: 4000000, paymentDate: "2026-09-12" });
+  const note = await createManualNote(db, input, actor);
+  const row = (await client.execute({ sql: "SELECT paid_amount, remaining_payment, payment_status, payment_date FROM supplier_notes WHERE id = ?", args: [note.id] })).rows[0];
+  assert.deepEqual([row.paid_amount, row.remaining_payment, row.payment_status, row.payment_date], [4000000, 0, "LUNAS", "2026-09-12"]);
+  assert.equal((await createManualNote(db, input, actor)).id, note.id);
+  await assert.rejects(createManualNote(db, { ...input, paidAmount: 0, paymentDate: "" }, actor), /data berbeda/);
+  await assert.rejects(createManualNote(db, { ...input, paymentDate: "2026-09-13" }, actor), /data berbeda/);
+  const dp = await createManualNote(db, payload({ paidAmount: 1000000 }), actor);
+  assert.equal((await client.execute({ sql: "SELECT payment_status FROM supplier_notes WHERE id = ?", args: [dp.id] })).rows[0].payment_status, "DP");
+  for (const paidAmount of [-1, 4000001, 1.5, "100", NaN]) assert.throws(() => validateManualNote(payload({ paidAmount })), /Pembayaran/);
+  for (const paymentDate of ["2026-02-30", "bad", null]) assert.throws(() => validateManualNote(payload({ paidAmount: 1, paymentDate })), /Tanggal pembayaran/);
+}));
+
 async function fixture(run) {
   const dir = await mkdtemp(join(tmpdir(), "mpm-manual-test-"));
   const url = `file:${join(dir, "notes.db").replaceAll("\\", "/")}`;

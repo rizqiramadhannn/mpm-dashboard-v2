@@ -24,7 +24,8 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
   const key = `${actor.id ?? "supplier-notes-api"}:${input.idempotencyKey}`;
   // Preserve legacy hashes for Pcs-only requests; Set remains part of identity.
   const hashItems = input.items.map(({ uom, ...item }) => uom === "Pcs" || !uom ? item : { ...item, uom });
-  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, purchasePurpose: input.purchasePurpose, customerId: input.customerId, items: hashItems })));
+  const paymentIdentity = input.paidAmount || input.paymentDate ? { paidAmount: input.paidAmount, paymentDate: input.paymentDate } : {};
+  const payloadHash = await hash(new TextEncoder().encode(JSON.stringify({ noteDate: input.noteDate, supplierId: input.supplierId, purchasePurpose: input.purchasePurpose, customerId: input.customerId, items: hashItems, ...paymentIdentity })));
   const save = () => db.transaction(async tx => {
     // Acquire the write lock before looking up idempotency. All concurrent
     // writers serialize here, including retries with the same request key.
@@ -57,7 +58,8 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       manualIdempotencyKey: key, manualPayloadHash: payloadHash,
       itemSummary: input.items.map(item => item.description).join("; "), amount: input.amount,
-      paymentStatus: "BELUM BAYAR", paidAmount: 0, remainingPayment: input.amount,
+      paymentStatus: input.paidAmount === 0 ? "BELUM BAYAR" : input.paidAmount === input.amount ? "LUNAS" : "DP",
+      paidAmount: input.paidAmount, remainingPayment: input.amount - input.paidAmount, paymentDate: input.paymentDate || null,
       category: "Spareparts", flag: "MPM", purchasePurpose: input.purchasePurpose, customerName,
       sourceFileName: fileName, sourceFileMimeType: "application/pdf", sourceFileSize: pdf.length, sourceFileBase64: fileBase64, sourceFileSha256: sha256,
       invoiceFileName: fileName, invoiceFileMimeType: "application/pdf", invoiceFileSize: pdf.length, invoiceFileBase64: fileBase64, invoiceFileSha256: sha256,
@@ -65,7 +67,7 @@ export async function createManualNote(db: Db, value: unknown, actor: Actor, ren
     await tx.insert(supplierNoteItems).values(input.items.map((item, i) => ({ ...item, supplierNoteId: note.id, lineNo: i + 1, uom: item.uom ?? "Pcs", flag: "MPM" })));
     // Same audit table and action convention as recordActivityLog, but inside
     // the transaction: audit failures cannot cause a committed-but-failed reply.
-    await tx.insert(appAdminAuditLogs).values({ actorUserId: actor.id, actorUsername: actor.username, ipAddress: actor.ipAddress, action: "supplier_manual_note_create", detailsJson: { id: note.id, noteNo, supplierId: supplier.id, itemCount: input.items.length, amount: input.amount } });
+    await tx.insert(appAdminAuditLogs).values({ actorUserId: actor.id, actorUsername: actor.username, ipAddress: actor.ipAddress, action: "supplier_manual_note_create", detailsJson: { id: note.id, noteNo, supplierId: supplier.id, itemCount: input.items.length, amount: input.amount, paidAmount: input.paidAmount, paymentDate: input.paymentDate } });
     return result(note, false);
   });
   for (let attempt = 0; ; attempt++) {

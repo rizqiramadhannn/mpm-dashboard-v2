@@ -1,5 +1,5 @@
 export type ManualItem = { description: string; quantity: number; unitPrice: number; uom?: string; totalPrice: number };
-export type ManualNoteInput = { noteDate: string; supplierId: string; purchasePurpose: "Stock" | "Pembelian Langsung"; customerId: string; idempotencyKey: string; items: ManualItem[]; amount: number };
+export type ManualNoteInput = { noteDate: string; supplierId: string; purchasePurpose: "Stock" | "Pembelian Langsung"; customerId: string; idempotencyKey: string; items: ManualItem[]; amount: number; paidAmount: number; paymentDate: string };
 
 export class ManualNoteError extends Error {
   status: number;
@@ -39,7 +39,12 @@ export function validateManualNote(value: unknown): ManualNoteInput {
   });
   const amount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   if (!Number.isSafeInteger(amount)) throw new ManualNoteError("Total nota terlalu besar.");
-  return { noteDate, supplierId, purchasePurpose, customerId, idempotencyKey, items, amount };
+  const paidAmount = payload.paidAmount === undefined ? 0 : payload.paidAmount;
+  if (typeof paidAmount !== "number" || !Number.isSafeInteger(paidAmount) || paidAmount < 0 || paidAmount > amount) throw new ManualNoteError("Pembayaran harus bilangan bulat rupiah antara 0 dan total nota.");
+  const paymentDate = payload.paymentDate === undefined ? "" : typeof payload.paymentDate === "string" ? payload.paymentDate : "invalid";
+  if (paymentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !Number.isFinite(Date.parse(`${paymentDate}T00:00:00Z`)) || new Date(`${paymentDate}T00:00:00Z`).toISOString().slice(0, 10) !== paymentDate || paymentDate < "1900-01-01")) throw new ManualNoteError("Tanggal pembayaran tidak valid.");
+  if (paymentDate && paidAmount === 0) throw new ManualNoteError("Tanggal pembayaran hanya untuk nota dengan pembayaran.");
+  return { noteDate, supplierId, purchasePurpose, customerId, idempotencyKey, items, amount, paidAmount, paymentDate };
 }
 
 export function manualNoteNumber(noteDate: string, sequence: number) {
