@@ -43,6 +43,24 @@ async function main() {
     console.log(JSON.stringify(await response.json(), null, 2));
     return;
   }
+  if (command === "settle") {
+    if (!payloadPath || invoicePath !== "--confirmed") {
+      throw new Error("Usage: settle payload.json --confirmed (only after reconciliation).");
+    }
+    const payload = JSON.parse(await readFile(payloadPath, "utf8"));
+    if (!payload.id || !Number.isSafeInteger(payload.expectedAmount) || !Number.isSafeInteger(payload.expectedPaidAmount) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.paymentDate ?? "")) {
+      throw new Error("Incomplete reviewed settlement payload.");
+    }
+    const path = `/api/supplier-notes/${encodeURIComponent(payload.id)}/settle`;
+    const response = await apiRequest(base, token, path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const { data } = await response.json();
+    console.log(JSON.stringify({ status: "settled-unverified", id: data.id, paidAmount: data.paidAmount, paymentDate: data.paymentDate, reused: data.reused }));
+    return;
+  }
   if (command === "list") {
     const response = await apiRequest(base, token, "/api/supplier-notes");
     const { data } = await response.json();
@@ -50,7 +68,7 @@ async function main() {
     return;
   }
   if (command !== "upload" || !payloadPath || !invoicePath || confirmation !== "--confirmed") {
-    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR upload payload.json invoice.pdf --confirmed (only after final user approval).");
+    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR settle payload.json --confirmed OR upload payload.json invoice.pdf --confirmed.");
   }
   const payload = JSON.parse(await readFile(payloadPath, "utf8"));
   if (!payload.supplierName || !payload.noteNo || !payload.noteDate || !payload.items?.length) throw new Error("Incomplete reviewed payload.");

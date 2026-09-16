@@ -8,12 +8,13 @@ const hash = createHash("sha256").update(token).digest("hex");
 const expiry = "2026-09-30T00:00:00Z";
 const now = Date.parse("2026-09-15T00:00:00Z");
 
-test("automation scope only permits nota GET/POST, masters GET/POST, manual POST and file GET", () => {
+test("automation scope only permits reviewed nota operations and file GET", () => {
   for (const [path, methods] of [
     ["/api/supplier-notes", ["GET", "POST"]],
     ["/api/supplier-notes/masters", ["GET", "POST"]],
     ["/api/supplier-notes/manual", ["POST"]],
     ["/api/supplier-notes/manual/id_123/settle", ["POST"]],
+    ["/api/supplier-notes/id_123/settle", ["POST"]],
     ["/supplier/nota-supplier/download/id_123", ["GET"]],
   ]) {
     for (const method of ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"]) {

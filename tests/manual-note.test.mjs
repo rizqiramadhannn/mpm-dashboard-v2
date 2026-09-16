@@ -13,6 +13,7 @@ import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manua
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
 import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.ts";
 import { settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
+import { settleSupplierNote } from "../app/supplier/nota-supplier/payment-storage.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
@@ -31,6 +32,19 @@ test("settlement protects reviewed amounts, reuses paid result and preserves not
   assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_manual_note_settled'")).rows[0].n, 1);
   await client.execute({sql:"UPDATE supplier_notes SET note_source='supplier' WHERE id=?",args:[note.id]});
   await assert.rejects(settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown'), /tidak ditemukan/);
+}));
+
+test("supplier settlement verifies reviewed state and records payment evidence", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload(), actor);
+  await client.execute({sql:"UPDATE supplier_notes SET note_source='supplier' WHERE id=?",args:[note.id]});
+  await assert.rejects(settleSupplierNote(db, note.id, {expectedAmount:1,expectedPaidAmount:0,paymentDate:'2026-09-16'}, 'unknown'), /Total berubah/);
+  await assert.rejects(settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:1,paymentDate:'2026-09-16'}, 'unknown'), /Pembayaran berubah/);
+  const result = await settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16',evidence:{sheet:'BCA MPM',row:10}}, 'unknown');
+  assert.deepEqual([result.paymentStatus,result.paidAmount,result.paymentDate,result.reused], ['LUNAS',4000000,'2026-09-16',false]);
+  const row = (await client.execute({sql:"SELECT paid_amount,remaining_payment,payment_status,payment_date FROM supplier_notes WHERE id=?",args:[note.id]})).rows[0];
+  assert.deepEqual([row.paid_amount,row.remaining_payment,row.payment_status,row.payment_date], [4000000,0,'LUNAS','2026-09-16']);
+  assert.equal((await settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16'}, 'unknown')).reused, true);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_note_settled'")).rows[0].n, 1);
 }));
 
 test("API actor, Set persistence/PDF and idempotent replay", () => fixture(async ([db], client) => {
