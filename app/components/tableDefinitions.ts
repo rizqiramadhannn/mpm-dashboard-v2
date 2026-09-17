@@ -122,6 +122,32 @@ export const TABLE_COLUMNS = {
       "label": "Action"
     }
   ],
+  "sph_item_history": [
+    {
+      "id": "c0",
+      "label": "Part Number"
+    },
+    {
+      "id": "c1",
+      "label": "Nama Item"
+    },
+    {
+      "id": "c2",
+      "label": "Customer"
+    },
+    {
+      "id": "c3",
+      "label": "Tanggal SPH"
+    },
+    {
+      "id": "c4",
+      "label": "No. SPH"
+    },
+    {
+      "id": "c5",
+      "label": "Status"
+    }
+  ],
   "supplier_notes": [
     {
       "id": "c0",
@@ -208,4 +234,4 @@ export const TABLE_COLUMNS = {
   ]
 } satisfies Record<string, TableColumn[]>;
 
-export const CONFIGURABLE_TABLE_IDS = ["supplier-notes","supplier-items","sph-list","invoices"];
+export const CONFIGURABLE_TABLE_IDS = ["supplier-notes","supplier-items","sph-list","sph-item-history","invoices"];

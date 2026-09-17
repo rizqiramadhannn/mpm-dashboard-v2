@@ -1437,6 +1437,10 @@ a {
   min-width: 1180px;
 }
 
+.sph-item-history-table {
+  min-width: 860px;
+}
+
 .supplier-note-table {
   min-width: 1260px;
 }
@@ -1578,6 +1582,16 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
 .status-badge.cancel {
   background: var(--primary-soft);
   color: var(--primary);
+}
+
+.status-badge.waiting {
+  background: #fff7df;
+  color: #9a6700;
+}
+
+.status-badge.deal {
+  background: #e9f8f2;
+  color: #047857;
 }
 
 .item-preview {

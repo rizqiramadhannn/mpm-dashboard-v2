@@ -15,6 +15,7 @@ type NavItem = {
 const sphItems: NavItem[] = [
   { label: "CREATE SPH", href: "/sph/create" },
   { label: "LIST SPH", href: "/sph/list" },
+  { label: "ITEM HISTORY", href: "/sph/item-history" },
 ];
 
 const customerItems: NavItem[] = [

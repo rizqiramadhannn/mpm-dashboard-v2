@@ -33,8 +33,8 @@ test("each table has stable unique IDs, named columns, and compact cookie storag
   assert.ok(total < 4096, `Worst-case cookies total ${total} bytes`);
 });
 
-test("column selection exists only on the three requested list pages", async () => {
-  const expected = ["invoices", "sph-list", "supplier-items", "supplier-notes"];
+test("column selection exists only on registered list pages", async () => {
+  const expected = ["invoices", "sph-item-history", "sph-list", "supplier-items", "supplier-notes"];
   assert.deepEqual([...CONFIGURABLE_TABLE_IDS].sort(), expected);
   const actual = [];
   async function inspect(directory) {

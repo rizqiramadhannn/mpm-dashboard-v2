@@ -87,6 +87,27 @@ export const sphDocuments = sqliteTable(
   })
 );
 
+// No foreign key: historical deals must survive deletion of the source SPH.
+export const sphStatusHistory = sqliteTable(
+  "sph_status_history",
+  {
+    id: text("id").primaryKey().$defaultFn(randomId),
+    sphId: text("sph_id").notNull(),
+    sphNo: text("sph_no").notNull(),
+    fromStatus: text("from_status").notNull(),
+    toStatus: text("to_status").notNull(),
+    changedAt: text("changed_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => ({
+    dealTimeIdx: index("sph_status_history_deal_time_idx").on(table.fromStatus, table.toStatus, table.changedAt),
+  })
+);
+
+export const dashboardStatusTracking = sqliteTable("dashboard_status_tracking", {
+  id: integer("id").primaryKey(),
+  installedAt: text("installed_at").notNull().default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+});
+
 export const sphItems = sqliteTable(
   "sph_items",
   {

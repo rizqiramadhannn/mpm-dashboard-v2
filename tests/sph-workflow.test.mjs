@@ -40,6 +40,7 @@ async function fixture(t) {
     await client.execute(`CREATE TABLE "${name}" (${columns.join(",")})`);
     for (const index of Object.values(table.indexes)) await client.execute(`CREATE ${index.isUnique ? "UNIQUE " : ""}INDEX "${index.name}" ON "${name}" (${index.columns.map(c => '"' + c + '"').join(",")})`);
   }
+  await client.executeMultiple(await readFile(new URL("../drizzle/0039_sph_status_history.sql", import.meta.url), "utf8"));
   const db = drizzle(client, { schema });
   const seed = async (id, status = "cek_harga", withItem = true) => {
     await db.insert(schema.sphDocuments).values({ id, sphNo: "SPH" + id, yy: "26", mm: "09", sequence: 1, customerCode: "ABC", customerName: "Customer", sphDate: "2026-09-15", totalAmount: 1000, status });
@@ -50,7 +51,7 @@ async function fixture(t) {
 }
 
 test("price approval waits for PO; PO creates a single invoice and repeated clicks preserve it", async t => {
-  const { db, seed, status } = await fixture(t);
+  const { client, db, seed, status } = await fixture(t);
   await seed("one");
   await assert.rejects(confirmSphPo(db, "one"), /Menunggu PO/);
   await approveSphPrice(db, "one");
@@ -66,6 +67,9 @@ test("price approval waits for PO; PO creates a single invoice and repeated clic
   assert.equal(await confirmSphPo(db, "one"), null);
   assert.equal((await db.select().from(schema.invoiceDocuments)).length, 1);
   assert.equal((await db.select().from(schema.invoiceDocuments))[0].paidAmount, 500);
+  const history = (await client.execute("SELECT * FROM sph_status_history WHERE from_status='menunggu_po_konfirmasi' AND to_status='menunggu_pengiriman'")).rows;
+  assert.equal(history.length, 1);
+  assert.equal(history[0].sph_id, "one");
 });
 
 test("reactivating a retained invoice syncs sales data while preserving payment data", async t => {
