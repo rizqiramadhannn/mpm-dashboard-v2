@@ -124,6 +124,10 @@ export const TABLE_COLUMNS = {
   ],
   "sph_item_history": [
     {
+      "id": "c3",
+      "label": "Tanggal SPH"
+    },
+    {
       "id": "c0",
       "label": "Part Number"
     },
@@ -132,12 +136,12 @@ export const TABLE_COLUMNS = {
       "label": "Nama Item"
     },
     {
-      "id": "c2",
-      "label": "Customer"
+      "id": "c6",
+      "label": "Harga/pcs"
     },
     {
-      "id": "c3",
-      "label": "Tanggal SPH"
+      "id": "c2",
+      "label": "Customer"
     },
     {
       "id": "c4",

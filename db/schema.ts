@@ -131,6 +131,39 @@ export const sphItems = sqliteTable(
   })
 );
 
+// Standalone historical price records imported from external spreadsheets.
+// Intentionally no foreign keys: these rows must not affect SPH workflow or revenue.
+export const sphImportedItemHistory = sqliteTable(
+  "sph_imported_item_history",
+  {
+    id: text("id").primaryKey(),
+    sourceSpreadsheetId: text("source_spreadsheet_id").notNull(),
+    sourceSheetName: text("source_sheet_name").notNull(),
+    sourceRow: integer("source_row").notNull(),
+    sourceKey: text("source_key").notNull(),
+    sphDate: text("sph_date").notNull(),
+    partNumber: text("part_number").notNull().default(""),
+    partName: text("part_name").notNull(),
+    customerName: text("customer_name").notNull(),
+    sphNo: text("sph_no").notNull(),
+    quantity: real("quantity"),
+    uom: text("uom").notNull().default(""),
+    unitPrice: integer("unit_price").notNull(),
+    totalPrice: integer("total_price"),
+    status: text("status").notNull().default("-"),
+    importedAt: text("imported_at")
+      .notNull()
+      .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
+  },
+  (table) => ({
+    sourceKeyIdx: uniqueIndex("sph_imported_item_history_source_key_idx").on(
+      table.sourceKey
+    ),
+    dateIdx: index("sph_imported_item_history_date_idx").on(table.sphDate),
+    sphNoIdx: index("sph_imported_item_history_sph_no_idx").on(table.sphNo),
+  })
+);
+
 export const shipments = sqliteTable(
   "shipments",
   {

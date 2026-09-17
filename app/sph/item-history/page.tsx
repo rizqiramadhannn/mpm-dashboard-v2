@@ -11,7 +11,11 @@ import {
 import { getCurrentPage, paginateRows, Pagination } from "../../components/Pagination";
 import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 import { getDb } from "../../../db";
-import { sphDocuments, sphItems } from "../../../db/schema";
+import {
+  sphDocuments,
+  sphImportedItemHistory,
+  sphItems,
+} from "../../../db/schema";
 import {
   itemHistoryMatchesQuery,
   itemHistoryStatus,
@@ -42,6 +46,12 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function formatRupiah(value: number) {
+  return `Rp${new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(value)}`;
+}
+
 export default async function SphItemHistoryPage({
   searchParams,
 }: {
@@ -50,26 +60,57 @@ export default async function SphItemHistoryPage({
   const params = (await searchParams) ?? {};
   const query = getSearchParam(params, "q");
   const db = await getDb();
-  const rows = await db
-    .select({
-      customerName: sphDocuments.customerName,
-      itemId: sphItems.id,
-      lineNo: sphItems.lineNo,
-      partName: sphItems.partName,
-      partNumber: sphItems.partNumber,
-      sphDate: sphDocuments.sphDate,
-      sphId: sphDocuments.id,
-      sphNo: sphDocuments.sphNo,
-      status: sphDocuments.status,
-    })
-    .from(sphItems)
-    .innerJoin(sphDocuments, eq(sphItems.sphId, sphDocuments.id))
-    .orderBy(
-      desc(sphDocuments.sphDate),
-      desc(sphDocuments.sphNo),
-      asc(sphItems.lineNo),
-      asc(sphItems.id)
-    );
+  const [dashboardRows, importedRows] = await Promise.all([
+    db
+      .select({
+        customerName: sphDocuments.customerName,
+        itemId: sphItems.id,
+        lineNo: sphItems.lineNo,
+        partName: sphItems.partName,
+        partNumber: sphItems.partNumber,
+        sphDate: sphDocuments.sphDate,
+        sphId: sphDocuments.id,
+        sphNo: sphDocuments.sphNo,
+        status: sphDocuments.status,
+        unitPrice: sphItems.unitPrice,
+      })
+      .from(sphItems)
+      .innerJoin(sphDocuments, eq(sphItems.sphId, sphDocuments.id))
+      .orderBy(
+        desc(sphDocuments.sphDate),
+        desc(sphDocuments.sphNo),
+        asc(sphItems.lineNo),
+        asc(sphItems.id)
+      ),
+    db
+      .select({
+        customerName: sphImportedItemHistory.customerName,
+        itemId: sphImportedItemHistory.id,
+        lineNo: sphImportedItemHistory.sourceRow,
+        partName: sphImportedItemHistory.partName,
+        partNumber: sphImportedItemHistory.partNumber,
+        sphDate: sphImportedItemHistory.sphDate,
+        sphNo: sphImportedItemHistory.sphNo,
+        status: sphImportedItemHistory.status,
+        unitPrice: sphImportedItemHistory.unitPrice,
+      })
+      .from(sphImportedItemHistory)
+      .orderBy(
+        desc(sphImportedItemHistory.sphDate),
+        desc(sphImportedItemHistory.sphNo),
+        asc(sphImportedItemHistory.sourceRow)
+      ),
+  ]);
+  const rows = [
+    ...dashboardRows.map((row) => ({ ...row, source: "dashboard" as const })),
+    ...importedRows.map((row) => ({ ...row, source: "imported" as const, sphId: null })),
+  ].sort(
+    (left, right) =>
+      right.sphDate.localeCompare(left.sphDate) ||
+      right.sphNo.localeCompare(left.sphNo) ||
+      left.lineNo - right.lineNo ||
+      left.itemId.localeCompare(right.itemId)
+  );
   const filteredRows = rows.filter((row) => itemHistoryMatchesQuery(row, query));
   const { pageRows, safePage } = paginateRows(filteredRows, getCurrentPage(params));
 
@@ -110,10 +151,11 @@ export default async function SphItemHistoryPage({
           >
             <thead>
               <tr>
+                <TableHeader columnId="c3">Tanggal SPH</TableHeader>
                 <TableHeader columnId="c0">Part Number</TableHeader>
                 <TableHeader columnId="c1">Nama Item</TableHeader>
+                <TableHeader columnId="c6">Harga/pcs</TableHeader>
                 <TableHeader columnId="c2">Customer</TableHeader>
-                <TableHeader columnId="c3">Tanggal SPH</TableHeader>
                 <TableHeader columnId="c4">No. SPH</TableHeader>
                 <TableHeader columnId="c5">Status</TableHeader>
               </tr>
@@ -124,22 +166,33 @@ export default async function SphItemHistoryPage({
                   const status = itemHistoryStatus(row.status);
 
                   return (
-                    <tr key={row.itemId}>
+                    <tr key={`${row.source}-${row.itemId}`}>
+                      <TableCell columnId="c3">{formatDate(row.sphDate)}</TableCell>
                       <TableCell columnId="c0">{row.partNumber || "-"}</TableCell>
                       <TableCell columnId="c1">
                         <strong className="table-primary">{row.partName}</strong>
                       </TableCell>
+                      <TableCell columnId="c6" className="numeric-cell">
+                        {formatRupiah(row.unitPrice)}
+                      </TableCell>
                       <TableCell columnId="c2">{row.customerName}</TableCell>
-                      <TableCell columnId="c3">{formatDate(row.sphDate)}</TableCell>
                       <TableCell columnId="c4">
-                        <Link className="table-primary" href={`/sph/edit/${row.sphId}`}>
-                          {row.sphNo}
-                        </Link>
+                        {row.source === "dashboard" ? (
+                          <Link className="table-primary" href={`/sph/edit/${row.sphId}`}>
+                            {row.sphNo}
+                          </Link>
+                        ) : (
+                          <strong className="table-primary">{row.sphNo}</strong>
+                        )}
                       </TableCell>
                       <TableCell columnId="c5">
-                        <span className={`status-badge ${status}`}>
-                          {itemHistoryStatusLabel(row.status)}
-                        </span>
+                        {row.source === "dashboard" ? (
+                          <span className={`status-badge ${status}`}>
+                            {itemHistoryStatusLabel(row.status)}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                     </tr>
                   );

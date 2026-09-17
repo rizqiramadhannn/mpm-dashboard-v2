@@ -8,6 +8,8 @@ import {
 } from "../app/sph/item-history/itemHistory.ts";
 
 test("item history maps current and legacy SPH statuses", () => {
+  assert.equal(itemHistoryStatusLabel("-"), "-");
+
   for (const status of ["cek_harga", "menunggu_po_konfirmasi", "draft"]) {
     assert.equal(itemHistoryStatus(status), "waiting");
     assert.equal(itemHistoryStatusLabel(status), "Waiting");
@@ -47,12 +49,19 @@ test("item history search covers every displayed business field", () => {
   assert.equal(itemHistoryMatchesQuery(row, ""), true);
 });
 
-test("item history page renders one row per joined item and links the SPH number to edit", async () => {
+test("item history page merges live and imported rows with price and links only live SPHs", async () => {
   const source = await readFile(new URL("../app/sph/item-history/page.tsx", import.meta.url), "utf8");
 
   assert.match(source, /\.from\(sphItems\)/);
   assert.match(source, /\.innerJoin\(sphDocuments/);
+  assert.match(source, /\.from\(sphImportedItemHistory\)/);
+  assert.match(source, /unitPrice: sphItems\.unitPrice/);
+  assert.match(source, /unitPrice: sphImportedItemHistory\.unitPrice/);
   assert.match(source, /pageRows\.map\(\(row\)/);
   assert.match(source, /href=\{`\/sph\/edit\/\$\{row\.sphId\}`\}/);
+  assert.match(source, /row\.source === "dashboard"/);
+  assert.ok(source.indexOf('columnId="c3"') < source.indexOf('columnId="c0"'));
+  assert.ok(source.indexOf('columnId="c1"') < source.indexOf('columnId="c6"'));
+  assert.ok(source.indexOf('columnId="c6"') < source.indexOf('columnId="c2"'));
   assert.match(source, /tableId="sph-item-history"/);
 });

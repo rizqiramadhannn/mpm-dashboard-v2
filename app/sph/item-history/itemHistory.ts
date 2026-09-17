@@ -29,6 +29,10 @@ export function itemHistoryStatus(status: string): ItemHistoryStatus {
 }
 
 export function itemHistoryStatusLabel(status: string) {
+  if (status.trim() === "-") {
+    return "-";
+  }
+
   const labels: Record<ItemHistoryStatus, string> = {
     cancel: "Cancel",
     deal: "Deal",
