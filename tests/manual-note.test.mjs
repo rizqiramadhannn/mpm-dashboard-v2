@@ -13,10 +13,27 @@ import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manua
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
 import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.ts";
 import { settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
+import { correctManualNote } from "../app/supplier/nota-manual/correction-storage.ts";
 import { settleSupplierNote } from "../app/supplier/nota-supplier/payment-storage.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
+
+test("manual correction protects reviewed state, replaces items and regenerates PDF", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload(), actor);
+  const before = (await client.execute({ sql: "SELECT note_no,note_date,invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  const expectedItems = [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000, uom: "Pcs" }];
+  const items = [{ description: "POMPA STEERING", quantity: 2, unitPrice: 1000000, uom: "Pcs" }];
+  await assert.rejects(correctManualNote(db, note.id, { expectedAmount: 1, expectedPaidAmount: 0, expectedItems, items }, "unknown"), /Total item review/);
+  const result = await correctManualNote(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 0, expectedItems, items }, "unknown");
+  assert.deepEqual([result.amount, result.remainingPayment, result.paymentStatus], [2000000, 2000000, "BELUM BAYAR"]);
+  const after = (await client.execute({ sql: "SELECT note_no,note_date,amount,invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  assert.deepEqual([after.note_no, after.note_date, after.amount], [before.note_no, before.note_date, 2000000]);
+  assert.notEqual(after.invoice_file_sha256, before.invoice_file_sha256);
+  const saved = (await client.execute({ sql: "SELECT quantity,unit_price,total_price FROM supplier_note_items WHERE supplier_note_id=?", args: [note.id] })).rows;
+  assert.deepEqual(saved.map(row => [row.quantity,row.unit_price,row.total_price]), [[2,1000000,2000000]]);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_manual_note_corrected'")).rows[0].n, 1);
+}));
 
 test("settlement protects reviewed amounts, reuses paid result and preserves note/PDF", () => fixture(async ([db], client) => {
   const note = await createManualNote(db, payload(), actor);
