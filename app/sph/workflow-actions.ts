@@ -73,7 +73,10 @@ export async function confirmSphPo(db: Db, sphId: string) {
     }
 
     const [existingInvoice] = await tx
-      .select({ id: invoiceDocuments.id })
+      .select({
+        id: invoiceDocuments.id,
+        paidAmount: invoiceDocuments.paidAmount,
+      })
       .from(invoiceDocuments)
       .where(eq(invoiceDocuments.sphId, sphId))
       .limit(1);
@@ -102,20 +105,32 @@ export async function confirmSphPo(db: Db, sphId: string) {
             .returning({ id: invoiceDocuments.id })
         )[0].id;
 
-    if (!existingInvoice) {
-      await tx.insert(invoiceItems).values(
-        items.map((item) => ({
-          invoiceId,
-          lineNo: item.lineNo,
-          partName: item.partName,
-          partNumber: item.partNumber,
-          quantity: item.quantity,
-          sphItemId: item.id,
-          totalPrice: item.totalPrice,
-          unitPrice: item.unitPrice,
-        }))
-      );
+    if (existingInvoice) {
+      await tx
+        .update(invoiceDocuments)
+        .set({
+          ...invoiceValues,
+          status:
+            document.totalAmount > 0 && existingInvoice.paidAmount >= document.totalAmount
+              ? "done"
+              : "pending",
+        })
+        .where(eq(invoiceDocuments.id, existingInvoice.id));
+      await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, existingInvoice.id));
     }
+
+    await tx.insert(invoiceItems).values(
+      items.map((item) => ({
+        invoiceId,
+        lineNo: item.lineNo,
+        partName: item.partName,
+        partNumber: item.partNumber,
+        quantity: item.quantity,
+        sphItemId: item.id,
+        totalPrice: item.totalPrice,
+        unitPrice: item.unitPrice,
+      }))
+    );
 
     await tx
       .update(sphDocuments)

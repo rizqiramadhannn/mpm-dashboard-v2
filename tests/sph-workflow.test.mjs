@@ -68,17 +68,25 @@ test("price approval waits for PO; PO creates a single invoice and repeated clic
   assert.equal((await db.select().from(schema.invoiceDocuments))[0].paidAmount, 500);
 });
 
-test("reactivating a retained invoice leaves all invoice fields and items intact", async t => {
+test("reactivating a retained invoice syncs sales data while preserving payment data", async t => {
   const { db, seed } = await fixture(t);
   await seed("old", "menunggu_po_konfirmasi");
   await confirmSphPo(db, "old");
   await db.update(schema.invoiceDocuments).set({ paidAmount: 1000, status: "done", poNo: "PO-42", feeAmount: 50, paymentProofFilesJson: [{ name: "proof", base64: "abc" }] });
-  await db.update(schema.sphDocuments).set({ status: "menunggu_po_konfirmasi" });
-  const before = await db.select().from(schema.invoiceDocuments);
-  const items = await db.select().from(schema.invoiceItems);
+  await db.update(schema.sphDocuments).set({ status: "menunggu_po_konfirmasi", totalAmount: 2000, amountInWords: "Dua ribu rupiah" });
+  await db.update(schema.sphItems).set({ quantity: 2, totalPrice: 2000 });
   await confirmSphPo(db, "old");
-  assert.deepEqual(await db.select().from(schema.invoiceDocuments), before);
-  assert.deepEqual(await db.select().from(schema.invoiceItems), items);
+  const [invoice] = await db.select().from(schema.invoiceDocuments);
+  assert.equal(invoice.totalAmount, 2000);
+  assert.equal(invoice.amountInWords, "Dua ribu rupiah");
+  assert.equal(invoice.paidAmount, 1000);
+  assert.equal(invoice.status, "pending");
+  assert.equal(invoice.poNo, "PO-42");
+  assert.equal(invoice.feeAmount, 50);
+  assert.deepEqual(invoice.paymentProofFilesJson, [{ name: "proof", base64: "abc" }]);
+  const [item] = await db.select().from(schema.invoiceItems);
+  assert.equal(item.quantity, 2);
+  assert.equal(item.totalPrice, 2000);
 });
 
 test("invalid states and missing items cannot be approved", async t => {
