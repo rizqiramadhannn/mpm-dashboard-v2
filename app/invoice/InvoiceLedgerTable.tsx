@@ -3,6 +3,7 @@ import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpan
 import { TABLE_COLUMNS } from "../components/tableDefinitions";
 
 import { useMemo, useState, useTransition } from "react";
+import { createBinaryZip } from "../components/binaryZip";
 import { downloadExcel } from "../components/excelExport";
 import { ItemListModal, type SphItem } from "../sph/list/ItemListModal";
 
@@ -52,6 +53,13 @@ type PreviewState = {
 
 type InvoiceLedgerTableProps = {
   canUpdatePaidAmount: boolean;
+  filteredInvoices: {
+    customerName: string;
+    hasTtdMaterai: boolean;
+    invoiceId: string | null;
+    invoiceNo: string;
+    sphNo: string;
+  }[];
   rows: LedgerRow[];
   updateLedgerAmountAction: (formData: FormData) => Promise<void>;
 };
@@ -117,6 +125,7 @@ function formatPercent(value: number, total: number) {
 
 export function InvoiceLedgerTable({
   canUpdatePaidAmount,
+  filteredInvoices,
   rows,
   updateLedgerAmountAction,
 }: InvoiceLedgerTableProps) {
@@ -127,6 +136,11 @@ export function InvoiceLedgerTable({
   const [draftValue, setDraftValue] = useState("");
   const [preview, setPreview] = useState<PreviewState>(null);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [showDownloadConfirmation, setShowDownloadConfirmation] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const rowById = useMemo(
     () => new Map(localRows.map((row) => [row.sphId, row])),
@@ -165,6 +179,73 @@ export function InvoiceLedgerTable({
       rows: localRows,
       sheetName: "List Invoice",
     });
+  }
+
+  async function downloadAllInvoices() {
+    const availableInvoices = filteredInvoices.filter(
+      (invoice): invoice is typeof invoice & { invoiceId: string } =>
+        Boolean(invoice.invoiceId)
+    );
+
+    if (availableInvoices.length === 0) {
+      return;
+    }
+
+    setDownloadProgress({ current: 0, total: availableInvoices.length });
+
+    try {
+      const zipFiles: { content: Uint8Array; name: string }[] = [];
+      const usedNames = new Set<string>();
+
+      for (let index = 0; index < availableInvoices.length; index += 1) {
+        const invoice = availableInvoices[index];
+        const response = await fetch(`/invoice/download/${invoice.invoiceId}`);
+
+        if (!response.ok) {
+          throw new Error(`Gagal mengambil invoice ${invoice.invoiceNo}.`);
+        }
+
+        const contentType = response.headers.get("content-type") ?? "";
+
+        if (!contentType.includes("application/pdf")) {
+          throw new Error(`File invoice ${invoice.invoiceNo} tidak valid.`);
+        }
+
+        const baseName = invoice.invoiceNo.replace(/[\\/:*?"<>|\x00-\x1f]+/g, "-").trim()
+          || `invoice-${index + 1}`;
+        let fileName = `${baseName}.pdf`;
+        let suffix = 2;
+
+        while (usedNames.has(fileName.toLocaleLowerCase("id-ID"))) {
+          fileName = `${baseName} (${suffix}).pdf`;
+          suffix += 1;
+        }
+
+        usedNames.add(fileName.toLocaleLowerCase("id-ID"));
+        zipFiles.push({
+          content: new Uint8Array(await response.arrayBuffer()),
+          name: fileName,
+        });
+        setDownloadProgress({ current: index + 1, total: availableInvoices.length });
+      }
+
+      const zip = createBinaryZip(zipFiles);
+      const blob = new Blob([zip], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `invoice-terfilter-${date}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setShowDownloadConfirmation(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Gagal download invoice.");
+    } finally {
+      setDownloadProgress(null);
+    }
   }
 
   function beginEdit(row: LedgerRow, field: EditableField) {
@@ -439,11 +520,22 @@ export function InvoiceLedgerTable({
   const previewUrl = preview
     ? `/invoice/file/${preview.invoiceId}?type=${preview.type}&index=${preview.selectedIndex}&inline=1`
     : "";
+  const missingTtdMaterai = filteredInvoices.filter(
+    (invoice) => !invoice.hasTtdMaterai
+  );
 
   return (
     <>
       <div className="table-export-bar">
         <TableColumnPicker tableId="invoices" columns={TABLE_COLUMNS.invoices} />
+        <button
+          className="secondary-button"
+          disabled={filteredInvoices.length === 0}
+          onClick={() => setShowDownloadConfirmation(true)}
+          type="button"
+        >
+          Download Semua Invoice
+        </button>
         <button
           className="secondary-button"
           disabled={localRows.length === 0}
@@ -530,6 +622,62 @@ export function InvoiceLedgerTable({
         </tbody>
         </ConfigurableTable>
       </div>
+
+      {showDownloadConfirmation ? (
+        <div className="preview-modal-backdrop" role="presentation">
+          <div
+            aria-labelledby="download-all-invoices-title"
+            aria-modal="true"
+            className="download-confirmation-modal"
+            role="dialog"
+          >
+            <div>
+              <h2 id="download-all-invoices-title">Download semua invoice terfilter?</h2>
+              <p>
+                Seluruh {filteredInvoices.length} invoice sesuai filter akan dimasukkan ke dalam
+                satu file ZIP.
+              </p>
+              {missingTtdMaterai.length > 0 ? (
+                <div className="download-missing-ttd">
+                  <strong>
+                    {missingTtdMaterai.length} SPH belum memiliki TTD Materai:
+                  </strong>
+                  <ul>
+                    {missingTtdMaterai.map((invoice) => (
+                      <li key={invoice.sphNo}>
+                        {invoice.sphNo} — {invoice.customerName}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            <div className="download-confirmation-actions">
+              <button
+                className="secondary-button"
+                disabled={Boolean(downloadProgress)}
+                onClick={() => setShowDownloadConfirmation(false)}
+                type="button"
+              >
+                Batal
+              </button>
+              <button
+                className="primary-button"
+                disabled={
+                  Boolean(downloadProgress) ||
+                  !filteredInvoices.some((invoice) => invoice.invoiceId)
+                }
+                onClick={() => void downloadAllInvoices()}
+                type="button"
+              >
+                {downloadProgress
+                  ? `Menyiapkan ${downloadProgress.current}/${downloadProgress.total}...`
+                  : "Download ZIP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {preview ? (
         <div className="preview-modal-backdrop" role="presentation">

@@ -1998,6 +1998,51 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
   width: min(980px, 94vw);
 }
 
+.download-confirmation-modal {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgb(15 23 42 / 0.28);
+  display: grid;
+  gap: 20px;
+  max-height: min(680px, 90vh);
+  overflow: auto;
+  padding: 24px;
+  width: min(580px, 94vw);
+}
+
+.download-confirmation-modal h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.download-confirmation-modal p {
+  color: #475467;
+  margin: 0;
+}
+
+.download-missing-ttd {
+  background: #fff8eb;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  color: #7a2e0e;
+  font-size: 14px;
+  margin-top: 16px;
+  padding: 12px 14px;
+}
+
+.download-missing-ttd ul {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  padding-left: 20px;
+}
+
+.download-confirmation-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .migrate-sph-modal {
   width: min(1180px, 96vw);
 }

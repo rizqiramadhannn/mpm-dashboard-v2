@@ -610,6 +610,13 @@ export default async function InvoicePage({
             toDate,
             safePage,
           ].join("|")}
+          filteredInvoices={filteredLedgerRows.map((row) => ({
+            customerName: row.customerName,
+            hasTtdMaterai: Boolean(row.ttdMateraiFile),
+            invoiceId: row.invoiceId,
+            invoiceNo: row.invoiceNo,
+            sphNo: row.sphNo,
+          }))}
           canUpdatePaidAmount={user.username.toLowerCase() === "superadmin"}
           rows={pageRows}
           updateLedgerAmountAction={updateLedgerAmountAction}
