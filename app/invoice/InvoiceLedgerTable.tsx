@@ -59,6 +59,7 @@ type InvoiceLedgerTableProps = {
     invoiceId: string | null;
     invoiceNo: string;
     sphNo: string;
+    ttdMateraiFileName: string;
   }[];
   rows: LedgerRow[];
   updateLedgerAmountAction: (formData: FormData) => Promise<void>;
@@ -184,7 +185,7 @@ export function InvoiceLedgerTable({
   async function downloadAllInvoices() {
     const availableInvoices = filteredInvoices.filter(
       (invoice): invoice is typeof invoice & { invoiceId: string } =>
-        Boolean(invoice.invoiceId)
+        Boolean(invoice.invoiceId && invoice.hasTtdMaterai)
     );
 
     if (availableInvoices.length === 0) {
@@ -199,25 +200,32 @@ export function InvoiceLedgerTable({
 
       for (let index = 0; index < availableInvoices.length; index += 1) {
         const invoice = availableInvoices[index];
-        const response = await fetch(`/invoice/download/${invoice.invoiceId}`);
+        const response = await fetch(`/invoice/file/${invoice.invoiceId}?type=ttd`);
 
         if (!response.ok) {
-          throw new Error(`Gagal mengambil invoice ${invoice.invoiceNo}.`);
+          throw new Error(`Gagal mengambil invoice TTD Materai ${invoice.invoiceNo}.`);
         }
 
         const contentType = response.headers.get("content-type") ?? "";
-
-        if (!contentType.includes("application/pdf")) {
-          throw new Error(`File invoice ${invoice.invoiceNo} tidak valid.`);
-        }
-
-        const baseName = invoice.invoiceNo.replace(/[\\/:*?"<>|\x00-\x1f]+/g, "-").trim()
-          || `invoice-${index + 1}`;
-        let fileName = `${baseName}.pdf`;
+        const fallbackExtension = contentType.includes("png")
+          ? ".png"
+          : contentType.includes("jpeg") || contentType.includes("jpg")
+            ? ".jpg"
+            : contentType.includes("webp")
+              ? ".webp"
+              : ".pdf";
+        const fallbackName = `${invoice.invoiceNo}-ttd-materai${fallbackExtension}`;
+        const safeName = (invoice.ttdMateraiFileName || fallbackName)
+          .replace(/[\\/:*?"<>|\x00-\x1f]+/g, "-")
+          .trim();
+        const extensionIndex = safeName.lastIndexOf(".");
+        const baseName = extensionIndex > 0 ? safeName.slice(0, extensionIndex) : safeName;
+        const extension = extensionIndex > 0 ? safeName.slice(extensionIndex) : fallbackExtension;
+        let fileName = `${baseName}${extension}`;
         let suffix = 2;
 
         while (usedNames.has(fileName.toLocaleLowerCase("id-ID"))) {
-          fileName = `${baseName} (${suffix}).pdf`;
+          fileName = `${baseName} (${suffix})${extension}`;
           suffix += 1;
         }
 
@@ -235,7 +243,7 @@ export function InvoiceLedgerTable({
       const link = document.createElement("a");
       const date = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `invoice-terfilter-${date}.zip`;
+      link.download = `invoice-ttd-materai-terfilter-${date}.zip`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -534,7 +542,7 @@ export function InvoiceLedgerTable({
           onClick={() => setShowDownloadConfirmation(true)}
           type="button"
         >
-          Download Semua Invoice
+          Download Invoice TTD Materai
         </button>
         <button
           className="secondary-button"
@@ -632,10 +640,13 @@ export function InvoiceLedgerTable({
             role="dialog"
           >
             <div>
-              <h2 id="download-all-invoices-title">Download semua invoice terfilter?</h2>
+              <h2 id="download-all-invoices-title">
+                Download invoice TTD Materai terfilter?
+              </h2>
               <p>
-                Seluruh {filteredInvoices.length} invoice sesuai filter akan dimasukkan ke dalam
-                satu file ZIP.
+                {filteredInvoices.length - missingTtdMaterai.length} dari{" "}
+                {filteredInvoices.length} invoice sesuai filter akan dimasukkan ke dalam satu
+                file ZIP.
               </p>
               {missingTtdMaterai.length > 0 ? (
                 <div className="download-missing-ttd">
@@ -665,7 +676,9 @@ export function InvoiceLedgerTable({
                 className="primary-button"
                 disabled={
                   Boolean(downloadProgress) ||
-                  !filteredInvoices.some((invoice) => invoice.invoiceId)
+                  !filteredInvoices.some(
+                    (invoice) => invoice.invoiceId && invoice.hasTtdMaterai
+                  )
                 }
                 onClick={() => void downloadAllInvoices()}
                 type="button"

@@ -616,6 +616,7 @@ export default async function InvoicePage({
             invoiceId: row.invoiceId,
             invoiceNo: row.invoiceNo,
             sphNo: row.sphNo,
+            ttdMateraiFileName: row.ttdMateraiFile?.name ?? "",
           }))}
           canUpdatePaidAmount={user.username.toLowerCase() === "superadmin"}
           rows={pageRows}

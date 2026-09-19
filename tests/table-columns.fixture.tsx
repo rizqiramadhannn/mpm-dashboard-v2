@@ -18,7 +18,7 @@ for (const pair of document.cookie.split("; ")) {
 const columns = [{ id: "c0", label: "Nama" }, { id: "c1", label: "Input" }, { id: "c2", label: "Qty" }];
 if (new URLSearchParams(location.search).has("new")) columns.push({ id: "c3", label: "Baru" });
 const items = [{ id: "one", lineNo: 1, partNumber: "PN1", partName: "Pompa", quantity: 2, unitPrice: 100, totalPrice: 200 }];
-const row: LedgerRow = { aging: "-", customerName: "Customer", feeAmount: 0, gpAmount: 100, gpPercent: "50%", hppAmount: 100, invoiceDate: "14/09/2026", invoiceDateRaw: "2026-09-14", invoiceId: "inv1", invoiceNo: "INV001", kodAmount: 0, modalAmount: 100, ongkirAmount: 0, paidAmount: 0, paymentDate: "-", paymentDueDate: "-", paymentProofFiles: [], paymentTerm: "CBD", sphId: "sph1", sphNo: "SPH001", items, status: "BELUM BAYAR", statusClassName: "belum-bayar", ttdMateraiFile: null, totalAmount: 200 };
+const row: LedgerRow = { aging: "-", customerName: "Customer", feeAmount: 0, gpAmount: 100, gpPercent: "50%", hppAmount: 100, invoiceDate: "14/09/2026", invoiceDateRaw: "2026-09-14", invoiceId: "inv1", invoiceNo: "INV001", kodAmount: 0, modalAmount: 100, ongkirAmount: 0, paidAmount: 0, paymentDate: "-", paymentDueDate: "-", paymentProofFiles: [], paymentTerm: "CBD", sphId: "sph1", sphNo: "SPH001", items, status: "BELUM BAYAR", statusClassName: "belum-bayar", ttdMateraiFile: { mimeType: "application/pdf", name: "signed-invoice.pdf", size: 20 }, totalAmount: 200 };
 function Fixture() {
   const [modal, setModal] = useState(false);
   return <TablePreferencesProvider scope={account} initialPreferences={initialPreferences}>
@@ -49,6 +49,14 @@ function Fixture() {
           invoiceId: row.invoiceId,
           invoiceNo: row.invoiceNo,
           sphNo: row.sphNo,
+          ttdMateraiFileName: row.ttdMateraiFile?.name ?? "",
+        }, {
+          customerName: "Customer Missing",
+          hasTtdMaterai: false,
+          invoiceId: "inv2",
+          invoiceNo: "INV002",
+          sphNo: "SPH002",
+          ttdMateraiFileName: "",
         }]}
         canUpdatePaidAmount={false}
         updateLedgerAmountAction={async () => {}}
