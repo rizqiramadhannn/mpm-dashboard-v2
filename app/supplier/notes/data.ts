@@ -640,7 +640,10 @@ export async function listSupplierNotes() {
 
   return notes.map((note) => {
     const paidAmount = clampPaidAmount(note.paidAmount, note.amount);
-    const paymentStatus = paymentStatusFromAmount(note.amount, paidAmount);
+    const isCancelled = note.paymentStatus === "CANCELLED";
+    const paymentStatus = isCancelled
+      ? "CANCELLED"
+      : paymentStatusFromAmount(note.amount, paidAmount);
     const hasInvoiceFile = Boolean(note.invoiceFileBase64 || note.sourceFileBase64);
     const paymentProofFiles = storedPaymentProofFiles(note).filter(
       (file) => file.base64
@@ -676,7 +679,7 @@ export async function listSupplierNotes() {
       paymentProofFiles: paymentProofFiles.map(fileMetadata),
       paymentTerm: note.paymentTerm,
       purchasePurpose: note.purchasePurpose,
-      remainingPayment: Math.max(note.amount - paidAmount, 0),
+      remainingPayment: isCancelled ? 0 : Math.max(note.amount - paidAmount, 0),
       sourceFileMimeType: hasInvoiceFile ? note.sourceFileMimeType : "",
       sourceFileName: hasInvoiceFile ? note.sourceFileName : "",
       sourceFileSize: hasInvoiceFile ? note.sourceFileSize : 0,
@@ -755,6 +758,7 @@ export async function updateSupplierNotePaidAmount(id: string, paidAmountInput: 
   const [note] = await db
     .select({
       amount: supplierNotes.amount,
+      paymentStatus: supplierNotes.paymentStatus,
     })
     .from(supplierNotes)
     .where(eq(supplierNotes.id, id))
@@ -762,6 +766,10 @@ export async function updateSupplierNotePaidAmount(id: string, paidAmountInput: 
 
   if (!note) {
     throw new Error("Nota supplier tidak ditemukan.");
+  }
+
+  if (note.paymentStatus === "CANCELLED") {
+    throw new Error("Nota yang sudah dibatalkan tidak dapat diubah pembayarannya.");
   }
 
   const paidAmount = clampPaidAmount(paidAmountInput, note.amount);
@@ -782,6 +790,42 @@ export async function updateSupplierNotePaidAmount(id: string, paidAmountInput: 
     paidAmount,
     paymentStatus,
     remainingPayment,
+  };
+}
+
+export async function cancelSupplierNote(
+  id: string,
+  database?: Awaited<ReturnType<typeof getDb>>
+) {
+  const db = database ?? (await getDb());
+  const [note] = await db
+    .select({
+      id: supplierNotes.id,
+      paymentStatus: supplierNotes.paymentStatus,
+    })
+    .from(supplierNotes)
+    .where(eq(supplierNotes.id, id))
+    .limit(1);
+
+  if (!note) {
+    throw new Error("Nota supplier tidak ditemukan.");
+  }
+
+  if (note.paymentStatus !== "CANCELLED") {
+    await db
+      .update(supplierNotes)
+      .set({
+        paymentStatus: "CANCELLED",
+        remainingPayment: 0,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(supplierNotes.id, id));
+  }
+
+  return {
+    id,
+    paymentStatus: "CANCELLED" as const,
+    remainingPayment: 0,
   };
 }
 

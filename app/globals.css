@@ -1932,6 +1932,34 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
   color: var(--primary);
 }
 
+.supplier-payment-status.cancelled {
+  background: #f2f4f7;
+  border-color: #d0d5dd;
+  color: #667085;
+}
+
+.cancel-note-button {
+  background: transparent;
+  border: 0;
+  color: #b42318;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+}
+
+.cancel-note-button:hover {
+  text-decoration: underline;
+}
+
+.cancel-note-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .supplier-payment-status.neutral {
   background: #eef2f7;
   border-color: #d9dee8;

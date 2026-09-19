@@ -97,7 +97,9 @@ export default async function SupplierNotesPage({
       if (note.paymentStatus === "LUNAS") {
         summary.paid += note.amount;
       }
-      summary.unpaid += note.remainingPayment;
+      if (note.paymentStatus !== "CANCELLED") {
+        summary.unpaid += note.remainingPayment;
+      }
       return summary;
     },
     { paid: 0, unpaid: 0 }

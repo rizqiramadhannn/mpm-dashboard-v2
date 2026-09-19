@@ -105,7 +105,15 @@ export function SupplierNotesTabs({ notes }: { notes: SupplierNote[] }) {
       </div>
 
       {activeTab === "invoice" ? (
-        <SupplierNotesTable notes={notes} />
+        <SupplierNotesTable
+          key={notes
+            .map(
+              (note) =>
+                `${note.id}:${note.paymentStatus}:${note.paidAmount}:${note.remainingPayment}`
+            )
+            .join("|")}
+          notes={notes}
+        />
       ) : (
         <>
         <div className="table-export-bar"><TableColumnPicker tableId="supplier-items" columns={TABLE_COLUMNS.supplier_items} /></div>

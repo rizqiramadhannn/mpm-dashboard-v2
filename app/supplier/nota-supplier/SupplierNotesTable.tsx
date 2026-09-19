@@ -2,6 +2,7 @@
 import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
 import { TABLE_COLUMNS } from "../../components/tableDefinitions";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { downloadExcel } from "../../components/excelExport";
 import { SupplierNoteItemListModal } from "./SupplierNoteItemListModal";
@@ -152,14 +153,20 @@ function paymentStatusClassName(status: string) {
     return "belum-bayar";
   }
 
+  if (normalized === "CANCELLED") {
+    return "cancelled";
+  }
+
   return "neutral";
 }
 
 export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
+  const router = useRouter();
   const [rows, setRows] = useState(notes);
   const [preview, setPreview] = useState<PreviewState>(null);
   const [editing, setEditing] = useState<EditingState>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
 
   function downloadRows() {
@@ -325,6 +332,44 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
     }
   }
 
+  async function cancelNote(note: SupplierNote) {
+    if (!window.confirm(`Batalkan nota ${note.noteNo}? Nota tidak akan dihitung sebagai belum bayar.`)) {
+      return;
+    }
+
+    setCancellingId(note.id);
+
+    try {
+      const response = await fetch("/api/supplier-notes", {
+        body: JSON.stringify({ action: "cancel", id: note.id }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Gagal membatalkan nota.");
+      }
+
+      setRows((currentRows) =>
+        currentRows.map((row) =>
+          row.id === note.id
+            ? {
+                ...row,
+                paymentStatus: result.data.paymentStatus,
+                remainingPayment: result.data.remainingPayment,
+              }
+            : row
+        )
+      );
+      router.refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Gagal membatalkan nota.");
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   const previewFile = preview?.files[preview.selectedIndex];
   const previewUrl = preview
     ? `/supplier/nota-supplier/download/${preview.noteId}?type=${preview.type}&index=${preview.selectedIndex}&inline=1`
@@ -394,7 +439,9 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                         </span>
                         <button
                           className="paid-amount-display"
-                          disabled={savingId === note.id}
+                          disabled={
+                            savingId === note.id || note.paymentStatus === "CANCELLED"
+                          }
                           onDoubleClick={() =>
                             setEditing({
                               id: note.id,
@@ -435,6 +482,16 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
                             ? ` / Jatuh tempo ${formatDate(note.paymentDeadline)}`
                             : ""}
                         </span>
+                        {note.paymentStatus !== "CANCELLED" ? (
+                          <button
+                            className="cancel-note-button"
+                            disabled={cancellingId === note.id}
+                            onClick={() => cancelNote(note)}
+                            type="button"
+                          >
+                            {cancellingId === note.id ? "Membatalkan..." : "Cancel nota"}
+                          </button>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell columnId="c7">

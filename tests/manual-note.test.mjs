@@ -15,6 +15,7 @@ import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.
 import { settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
 import { correctManualNote } from "../app/supplier/nota-manual/correction-storage.ts";
 import { settleSupplierNote } from "../app/supplier/nota-supplier/payment-storage.ts";
+import { cancelSupplierNote } from "../app/supplier/notes/data.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
@@ -62,6 +63,16 @@ test("supplier settlement verifies reviewed state and records payment evidence",
   assert.deepEqual([row.paid_amount,row.remaining_payment,row.payment_status,row.payment_date], [4000000,0,'LUNAS','2026-09-16']);
   assert.equal((await settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16'}, 'unknown')).reused, true);
   assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_note_settled'")).rows[0].n, 1);
+}));
+
+test("cancelled supplier notes have no remaining payment and cancellation is idempotent", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload(), actor);
+  const result = await cancelSupplierNote(note.id, db);
+  assert.deepEqual([result.paymentStatus, result.remainingPayment], ["CANCELLED", 0]);
+  const row = (await client.execute({ sql: "SELECT payment_status, remaining_payment, paid_amount FROM supplier_notes WHERE id = ?", args: [note.id] })).rows[0];
+  assert.deepEqual([row.payment_status, row.remaining_payment, row.paid_amount], ["CANCELLED", 0, 0]);
+  assert.deepEqual(await cancelSupplierNote(note.id, db), result);
+  await assert.rejects(cancelSupplierNote("missing", db), /tidak ditemukan/);
 }));
 
 test("API actor, Set persistence/PDF and idempotent replay", () => fixture(async ([db], client) => {

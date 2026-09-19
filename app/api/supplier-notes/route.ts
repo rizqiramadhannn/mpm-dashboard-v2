@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  cancelSupplierNote,
   createSupplierNote,
   listSupplierNotes,
   updateSupplierNoteFiles,
@@ -152,8 +153,12 @@ export async function PATCH(request: Request) {
       "paidAmount" in payload
         ? await updateSupplierNotePaidAmount(id, payload.paidAmount)
         : null;
+    const cancellationUpdate =
+      payload.action === "cancel" ? await cancelSupplierNote(id) : null;
 
-    return NextResponse.json({ data: { ...fileUpdate, ...paymentUpdate, id } });
+    return NextResponse.json({
+      data: { ...fileUpdate, ...paymentUpdate, ...cancellationUpdate, id },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Gagal mengubah nota supplier.";
