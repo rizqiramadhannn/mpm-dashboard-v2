@@ -14,6 +14,7 @@ test("automation scope only permits reviewed nota operations and file GET", () =
     ["/api/supplier-notes/masters", ["GET", "POST"]],
     ["/api/supplier-notes/manual", ["POST"]],
     ["/api/supplier-notes/manual/id_123/correct", ["POST"]],
+    ["/api/supplier-notes/manual/id_123/reopen", ["POST"]],
     ["/api/supplier-notes/manual/id_123/settle", ["POST"]],
     ["/api/supplier-notes/id_123/settle", ["POST"]],
     ["/supplier/nota-supplier/download/id_123", ["GET"]],

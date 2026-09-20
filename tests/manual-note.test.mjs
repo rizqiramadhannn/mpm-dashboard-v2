@@ -12,13 +12,26 @@ import { createManualNote, listManualNotes } from "../app/supplier/nota-manual/s
 import { manualNoteNumber, validateManualNote } from "../app/supplier/nota-manual/model.ts";
 import { generateManualNotePdf } from "../app/supplier/nota-manual/pdf.ts";
 import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.ts";
-import { settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
+import { reopenManualNoteAsUnpaid, settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
 import { correctManualNote } from "../app/supplier/nota-manual/correction-storage.ts";
 import { settleSupplierNote } from "../app/supplier/nota-supplier/payment-storage.ts";
 import { cancelSupplierNote } from "../app/supplier/notes/data.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
 const payload = (overrides = {}) => ({ noteDate: "2026-09-12", supplierId: "supplier-1", purchasePurpose: "Stock", idempotencyKey: crypto.randomUUID(), items: [{ description: "POMPA STEERING", quantity: 2, unitPrice: 2000000 }], ...overrides });
+
+test("cancelled manual note can be safely reopened as unpaid", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload({ paidAmount: 4000000, paymentDate: "2026-09-12" }), actor);
+  const before = (await client.execute({ sql: "SELECT invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  await client.execute({ sql: "UPDATE supplier_notes SET payment_status='CANCELLED', payment_date=NULL WHERE id=?", args: [note.id] });
+  await assert.rejects(reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 1, expectedPaidAmount: 0, expectedPaymentStatus: "CANCELLED" }, "unknown"), /Total berubah/);
+  const result = await reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 4000000, expectedPaymentStatus: "CANCELLED" }, "unknown");
+  assert.deepEqual([result.paidAmount, result.remainingPayment, result.paymentStatus, result.paymentDate], [0, 4000000, "BELUM BAYAR", null]);
+  assert.equal((await reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 4000000, expectedPaymentStatus: "CANCELLED" }, "unknown")).reused, true);
+  const after = (await client.execute({ sql: "SELECT paid_amount,remaining_payment,payment_status,payment_date,invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  assert.deepEqual([after.paid_amount,after.remaining_payment,after.payment_status,after.payment_date,after.invoice_file_sha256], [0,4000000,"BELUM BAYAR",null,before.invoice_file_sha256]);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_manual_note_reopened_unpaid'")).rows[0].n, 1);
+}));
 
 test("manual correction protects reviewed state, replaces items and regenerates PDF", () => fixture(async ([db], client) => {
   const note = await createManualNote(db, payload(), actor);
