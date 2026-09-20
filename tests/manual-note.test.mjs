@@ -65,16 +65,20 @@ test("settlement protects reviewed amounts, reuses paid result and preserves not
   await assert.rejects(settleManualNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0}, 'unknown'), /tidak ditemukan/);
 }));
 
-test("supplier settlement verifies reviewed state and records payment evidence", () => fixture(async ([db], client) => {
+test("supplier settlement verifies reviewed state, stores proof and records payment evidence", () => fixture(async ([db], client) => {
   const note = await createManualNote(db, payload(), actor);
   await client.execute({sql:"UPDATE supplier_notes SET note_source='supplier' WHERE id=?",args:[note.id]});
-  await assert.rejects(settleSupplierNote(db, note.id, {expectedAmount:1,expectedPaidAmount:0,paymentDate:'2026-09-16'}, 'unknown'), /Total berubah/);
-  await assert.rejects(settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:1,paymentDate:'2026-09-16'}, 'unknown'), /Pembayaran berubah/);
-  const result = await settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16',evidence:{sheet:'BCA MPM',row:10}}, 'unknown');
-  assert.deepEqual([result.paymentStatus,result.paidAmount,result.paymentDate,result.reused], ['LUNAS',4000000,'2026-09-16',false]);
-  const row = (await client.execute({sql:"SELECT paid_amount,remaining_payment,payment_status,payment_date FROM supplier_notes WHERE id=?",args:[note.id]})).rows[0];
+  const reviewed = {expectedNoteNo:note.noteNo,expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16'};
+  await assert.rejects(settleSupplierNote(db, note.id, {...reviewed,expectedNoteNo:'wrong'}, 'unknown'), /Nomor nota berubah/);
+  await assert.rejects(settleSupplierNote(db, note.id, {...reviewed,expectedAmount:1}, 'unknown'), /Total berubah/);
+  await assert.rejects(settleSupplierNote(db, note.id, {...reviewed,expectedPaidAmount:1}, 'unknown'), /Pembayaran berubah/);
+  const proof = {name:'proof.pdf',mimeType:'application/pdf',size:4,base64:Buffer.from('test').toString('base64')};
+  const result = await settleSupplierNote(db, note.id, {...reviewed,paymentProofFiles:[proof],evidence:{reference:'BCA-1'}}, 'unknown');
+  assert.deepEqual([result.paymentStatus,result.paidAmount,result.paymentDate,result.paymentProofCount,result.reused], ['LUNAS',4000000,'2026-09-16',1,false]);
+  const row = (await client.execute({sql:"SELECT paid_amount,remaining_payment,payment_status,payment_date,payment_proof_files_json FROM supplier_notes WHERE id=?",args:[note.id]})).rows[0];
   assert.deepEqual([row.paid_amount,row.remaining_payment,row.payment_status,row.payment_date], [4000000,0,'LUNAS','2026-09-16']);
-  assert.equal((await settleSupplierNote(db, note.id, {expectedAmount:4000000,expectedPaidAmount:0,paymentDate:'2026-09-16'}, 'unknown')).reused, true);
+  assert.equal(JSON.parse(row.payment_proof_files_json).length, 1);
+  assert.equal((await settleSupplierNote(db, note.id, {...reviewed,paymentProofFiles:[proof]}, 'unknown')).reused, true);
   assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_note_settled'")).rows[0].n, 1);
 }));
 

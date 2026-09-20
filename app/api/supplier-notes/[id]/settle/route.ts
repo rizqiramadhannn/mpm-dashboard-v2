@@ -9,6 +9,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  return Buffer.from(buffer).toString("base64");
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -24,7 +28,29 @@ export async function POST(
 
   let payload: unknown;
   try {
-    payload = await request.json();
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData();
+      const payloadValue = formData.get("payload");
+      if (typeof payloadValue !== "string" || !payloadValue.trim()) {
+        throw new Error("Payload tidak valid.");
+      }
+      const parsed = JSON.parse(payloadValue) as Record<string, unknown>;
+      const paymentProofFiles = formData
+        .getAll("paymentProofFiles")
+        .filter((value): value is File => value instanceof File);
+      parsed.paymentProofFiles = await Promise.all(
+        paymentProofFiles.map(async (file) => ({
+          name: file.name,
+          mimeType: file.type,
+          size: file.size,
+          base64: arrayBufferToBase64(await file.arrayBuffer()),
+        })),
+      );
+      payload = parsed;
+    } else {
+      payload = await request.json();
+    }
   } catch {
     return NextResponse.json({ error: "JSON tidak valid." }, { status: 400 });
   }

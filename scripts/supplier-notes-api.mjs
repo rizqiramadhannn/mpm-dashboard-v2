@@ -44,21 +44,46 @@ async function main() {
     return;
   }
   if (command === "settle") {
-    if (!payloadPath || invoicePath !== "--confirmed") {
-      throw new Error("Usage: settle payload.json --confirmed (only after reconciliation).");
+    const settleArgs = process.argv.slice(4);
+    if (!payloadPath || settleArgs.at(-1) !== "--confirmed") {
+      throw new Error("Usage: settle payload.json [payment-proof.pdf ...] --confirmed (only after reconciliation).");
     }
+    const proofPaths = settleArgs.slice(0, -1);
     const payload = JSON.parse(await readFile(payloadPath, "utf8"));
-    if (!payload.id || !Number.isSafeInteger(payload.expectedAmount) || !Number.isSafeInteger(payload.expectedPaidAmount) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.paymentDate ?? "")) {
+    if (!payload.id || !payload.expectedNoteNo || !Number.isSafeInteger(payload.expectedAmount) || !Number.isSafeInteger(payload.expectedPaidAmount) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.paymentDate ?? "")) {
       throw new Error("Incomplete reviewed settlement payload.");
     }
     const path = `/api/supplier-notes/${encodeURIComponent(payload.id)}/settle`;
-    const response = await apiRequest(base, token, path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let options;
+    if (proofPaths.length > 0) {
+      const form = new FormData();
+      form.append("payload", JSON.stringify(payload));
+      for (const proofPath of proofPaths) {
+        if (!/\.(pdf|jpe?g|png)$/i.test(proofPath)) {
+          throw new Error("Supported payment proof files: PDF, JPEG, PNG.");
+        }
+        const mime = /\.pdf$/i.test(proofPath)
+          ? "application/pdf"
+          : /\.png$/i.test(proofPath)
+            ? "image/png"
+            : "image/jpeg";
+        form.append(
+          "paymentProofFiles",
+          new Blob([await readFile(proofPath)], { type: mime }),
+          basename(proofPath),
+        );
+      }
+      options = { method: "POST", body: form };
+    } else {
+      options = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      };
+    }
+    const response = await apiRequest(base, token, path, options);
     const { data } = await response.json();
-    console.log(JSON.stringify({ status: "settled-unverified", id: data.id, paidAmount: data.paidAmount, paymentDate: data.paymentDate, reused: data.reused }));
+    console.log(JSON.stringify({ status: "settled-unverified", id: data.id, paidAmount: data.paidAmount, paymentDate: data.paymentDate, paymentProofCount: data.paymentProofCount, reused: data.reused }));
     return;
   }
   if (command === "list") {
@@ -68,7 +93,7 @@ async function main() {
     return;
   }
   if (command !== "upload" || !payloadPath || !invoicePath || confirmation !== "--confirmed") {
-    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR settle payload.json --confirmed OR upload payload.json invoice.pdf --confirmed.");
+    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR settle payload.json [payment-proof.pdf ...] --confirmed OR upload payload.json invoice.pdf --confirmed.");
   }
   const payload = JSON.parse(await readFile(payloadPath, "utf8"));
   if (!payload.supplierName || !payload.noteNo || !payload.noteDate || !payload.items?.length) throw new Error("Incomplete reviewed payload.");
