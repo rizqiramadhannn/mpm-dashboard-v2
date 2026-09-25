@@ -3173,3 +3173,17 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
   background: #fef3c7;
   border-color: #fcd34d;
 }
+
+.whatsapp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; margin: 20px 0; }
+.whatsapp-card { background: #fff; border: 1px solid #d9e0e7; border-radius: 12px; padding: 20px; margin: 20px 0; }
+.whatsapp-card h2 { margin-top: 0; }
+.whatsapp-qr { width: 260px; max-width: 100%; height: auto; background: #fff; padding: 8px; }
+.whatsapp-muted { color: #64748b; font-size: .9rem; }
+.whatsapp-groups { display: grid; gap: 8px; max-height: 300px; overflow-y: auto; margin: 16px 0; }
+.whatsapp-groups label { display: flex; gap: 8px; align-items: center; }
+.whatsapp-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.whatsapp-toolbar label { display: grid; gap: 4px; }
+.whatsapp-toolbar input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; }
+.whatsapp-digest { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px; }
+.whatsapp-digest ul { padding-left: 20px; max-height: 360px; overflow-y: auto; }
+.whatsapp-digest li { margin: 7px 0; overflow-wrap: anywhere; }

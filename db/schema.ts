@@ -1001,3 +1001,54 @@ export const employeeSalaryPaymentsRelations = relations(
     }),
   })
 );
+
+// Short-lived WhatsApp cache. Connection and monitored group settings persist.
+export const whatsappConnection = sqliteTable("whatsapp_connection", {
+  id: integer("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  sessionName: text("session_name").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const whatsappGroups = sqliteTable("whatsapp_groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  monitored: integer("monitored", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const whatsappMessages = sqliteTable("whatsapp_messages", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull(),
+  sourceId: text("source_id").notNull(),
+  sentAt: text("sent_at").notNull(),
+  wibDate: text("wib_date").notNull(),
+  senderId: text("sender_id").notNull().default(""),
+  senderName: text("sender_name").notNull().default(""),
+  body: text("body").notNull().default(""),
+  messageType: text("message_type").notNull().default(""),
+  mediaName: text("media_name").notNull().default(""),
+  mediaMime: text("media_mime").notNull().default(""),
+  mediaStatus: text("media_status").notNull().default("none"),
+  mediaBase64: text("media_base64").notNull().default(""),
+  mediaSha256: text("media_sha256").notNull().default(""),
+  syncedAt: text("synced_at").notNull(),
+}, (table) => ({
+  sourceIdx: uniqueIndex("whatsapp_messages_source_idx").on(table.groupId, table.sourceId),
+  dateIdx: index("whatsapp_messages_date_idx").on(table.wibDate, table.groupId),
+}));
+
+export const whatsappDailySyncs = sqliteTable("whatsapp_daily_syncs", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull(),
+  wibDate: text("wib_date").notNull(),
+  status: text("status").notNull(),
+  messageCount: integer("message_count").notNull().default(0),
+  mediaCount: integer("media_count").notNull().default(0),
+  failedMediaCount: integer("failed_media_count").notNull().default(0),
+  checkedAt: text("checked_at").notNull(),
+  note: text("note").notNull().default(""),
+}, (table) => ({
+  groupDateIdx: uniqueIndex("whatsapp_daily_syncs_group_date_idx").on(table.groupId, table.wibDate),
+  dateIdx: index("whatsapp_daily_syncs_date_idx").on(table.wibDate),
+}));

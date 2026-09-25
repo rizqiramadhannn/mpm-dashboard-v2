@@ -19,5 +19,5 @@ export async function AppShell({ children }: { children: ReactNode }) {
       if (CONFIGURABLE_TABLE_IDS.includes(tableId)) tablePreferences[tableId] = parseHiddenColumns(cookie.value);
     }
   }
-  return <AppShellClient canAccessRestrictedMenus={canAccessRestrictedMenus(user)} tablePreferenceScope={tablePreferenceScope} tablePreferences={tablePreferences}>{children}</AppShellClient>;
+  return <AppShellClient canAccessRestrictedMenus={canAccessRestrictedMenus(user)} isSuperadmin={user?.role === "superadmin"} tablePreferenceScope={tablePreferenceScope} tablePreferences={tablePreferences}>{children}</AppShellClient>;
 }

@@ -49,7 +49,7 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AppShellClient({ children, canAccessRestrictedMenus, tablePreferenceScope = "anonymous", tablePreferences = {} }: { children: ReactNode; canAccessRestrictedMenus: boolean; tablePreferenceScope?: string; tablePreferences?: TablePreferences }) {
+export function AppShellClient({ children, canAccessRestrictedMenus, isSuperadmin, tablePreferenceScope = "anonymous", tablePreferences = {} }: { children: ReactNode; canAccessRestrictedMenus: boolean; isSuperadmin: boolean; tablePreferenceScope?: string; tablePreferences?: TablePreferences }) {
   const pathname = usePathname();
   const sphActive = pathname.startsWith("/sph");
   const customerActive = pathname.startsWith("/customer");
@@ -198,6 +198,8 @@ export function AppShellClient({ children, canAccessRestrictedMenus, tablePrefer
           >
             ADMIN USERS
           </Link>
+
+          {isSuperadmin ? <Link className={isActive(pathname, "/admin/whatsapp") ? "nav-link active" : "nav-link"} href="/admin/whatsapp">SYNC WHATSAPP</Link> : null}
 
           <a
             className="nav-link"
