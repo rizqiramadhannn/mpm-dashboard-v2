@@ -5,7 +5,7 @@ import { AppShell } from "../components/AppShell";
 import { Pagination } from "../components/Pagination";
 import { getDb } from "../../db";
 import { financeRecords } from "../../db/schema";
-import { FINANCE_CATEGORIES, FINANCE_TABS, FinanceTab, SGA_CATEGORIES } from "./constants";
+import { FINANCE_CATEGORIES, FINANCE_TABS, FinanceTab, normalizeFinanceCategory, SGA_CATEGORIES } from "./constants";
 import { FinanceExcelDownload } from "./FinanceExcelDownload";
 import { moveFinanceRecordAction } from "./data";
 
@@ -40,11 +40,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Sear
   const totalIncome = sum(incomeRows);
   const totalOutcome = sum(outcomeRows);
   const groupedRows = view === "income" ? incomeRows : view === "stock"
-    ? outcomeRows.filter((row) => row.financeCategory === "Stock & Penjualan")
+    ? outcomeRows.filter((row) => normalizeFinanceCategory(row.financeCategory) === "Stock")
+    : view === "sales" ? outcomeRows.filter((row) => row.financeCategory === "Penjualan")
     : view === "sga" ? outcomeRows.filter((row) => SGA_CATEGORIES.includes(row.financeCategory as never)) : [];
   const sources = [...new Set(groupedRows.map((row) => row.sourceSheet))].sort((a, b) => a.localeCompare(b));
   const filteredRows = groupedRows.filter((row) => {
-    const matchesQuery = !query || [row.description, row.counterparty, row.sourceSheet, row.sourceDocument, row.financeCategory, row.notes]
+    const matchesQuery = !query || [row.description, row.counterparty, row.sourceSheet, row.sourceDocument, normalizeFinanceCategory(row.financeCategory), row.notes]
       .some((value) => value.toLocaleLowerCase("id-ID").includes(query.toLocaleLowerCase("id-ID")));
     return matchesQuery && (!source || row.sourceSheet === source) && (!category || row.financeCategory === category);
   });
@@ -83,7 +84,10 @@ function FinanceSummary({ income, month, outcome, previousRows, rows }: { income
   const net = income - outcome;
   const outcomes = rows.filter((row) => row.direction === "outcome");
   const incomes = rows.filter((row) => row.direction === "income");
-  const byCategory = Array.from(outcomes.reduce((map, row) => map.set(row.financeCategory, (map.get(row.financeCategory) || 0) + row.amount), new Map<string, number>()))
+  const byCategory = Array.from(outcomes.reduce((map, row) => {
+    const category = normalizeFinanceCategory(row.financeCategory);
+    return map.set(category, (map.get(category) || 0) + row.amount);
+  }, new Map<string, number>()))
     .map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   const palette = ["#1f806d", "#48b792", "#e6b453", "#e87b6c", "#8e78c7", "#4d82bd", "#bf739b", "#83998f"];
   let donutOffset = 0;
@@ -111,7 +115,8 @@ function FinanceSummary({ income, month, outcome, previousRows, rows }: { income
   const ratios = [
     { label: "Net margin", value: income ? net / income : 0, detail: "Net terhadap income" },
     { label: "SGA ratio", value: income ? sgaTotal / income : 0, detail: "SGA terhadap income" },
-    { label: "Stock ratio", value: income ? (byCategory.find((item) => item.name === "Stock & Penjualan")?.value || 0) / income : 0, detail: "Stock terhadap income" },
+    { label: "Stock ratio", value: income ? (byCategory.find((item) => item.name === "Stock")?.value || 0) / income : 0, detail: "Stock terhadap income" },
+    { label: "Penjualan ratio", value: income ? (byCategory.find((item) => item.name === "Penjualan")?.value || 0) / income : 0, detail: "Penjualan terhadap income" },
   ];
 
   return <>
@@ -143,7 +148,7 @@ function FinanceSummary({ income, month, outcome, previousRows, rows }: { income
     </div>
 
     <div className="finance-visual-grid equal">
-      <article className="finance-panel"><div className="finance-panel-heading"><div><h2>Transaksi Terbesar</h2><p>Delapan transaksi dengan nominal tertinggi</p></div></div><div className="top-transactions">{topTransactions.map((row, index) => <div key={row.id}><span className="top-rank">{index + 1}</span><div><strong>{row.description || row.counterparty || "Transaksi"}</strong><small>{dateLabel(row.transactionDate)} · {row.financeCategory}</small></div><b className={row.direction}>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</b></div>)}</div></article>
+      <article className="finance-panel"><div className="finance-panel-heading"><div><h2>Transaksi Terbesar</h2><p>Delapan transaksi dengan nominal tertinggi</p></div></div><div className="top-transactions">{topTransactions.map((row, index) => <div key={row.id}><span className="top-rank">{index + 1}</span><div><strong>{row.description || row.counterparty || "Transaksi"}</strong><small>{dateLabel(row.transactionDate)} · {normalizeFinanceCategory(row.financeCategory)}</small></div><b className={row.direction}>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</b></div>)}</div></article>
       <article className="finance-panel"><div className="finance-panel-heading"><div><h2>Perbandingan Periode</h2><p>{month ? "Dibanding bulan sebelumnya" : "Pilih satu bulan untuk membandingkan"}</p></div></div><div className="period-comparison"><Comparison label="Income" current={income} previous={previousIncome} /><Comparison inverse label="Outcome" current={outcome} previous={previousOutcome} /><Comparison label="Net Cash Flow" current={net} previous={previousNet} /></div></article>
     </div>
   </>;
@@ -165,7 +170,7 @@ function LedgerView({ allRows, category, rows, currentPage, params, query, sourc
   return <article className="finance-panel ledger-panel"><div className="finance-panel-heading"><div><h2>{title}</h2><p>{totalItems.toLocaleString("id-ID")} transaksi · {money(sum(allRows))} total ledger</p></div>{view === "sga" ? <FinanceExcelDownload rows={allRows} /> : null}</div>
     <form className="finance-ledger-filters" method="get"><input name="view" type="hidden" value={view} />{single(params.month) ? <input name="month" type="hidden" value={single(params.month)} /> : null}<label><span>Cari transaksi</span><input defaultValue={query} name="q" placeholder="Keterangan, tujuan, sumber..." type="search" /></label><label><span>Sumber</span><select defaultValue={source} name="source"><option value="">Semua sumber</option>{sources.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>{view === "sga" ? <label><span>Kategori</span><select defaultValue={category} name="category"><option value="">Semua kategori SGA</option>{SGA_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select></label> : null}<button type="submit">Filter</button>{query || source || category ? <Link className="finance-filter-reset" href={tabHref(view, single(params.month))}>Reset</Link> : null}</form>
     <div className="customer-table-wrap"><table className="customer-table finance-table"><thead><tr><th>Tanggal</th><th>Sumber</th><th>Keterangan</th><th>Tujuan</th><th>Kategori / Pindahkan</th><th>Nominal</th></tr></thead>
-      <tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><strong>{dateLabel(row.transactionDate)}</strong><small>{row.transactionTime}</small></td><td>{row.sourceSheet}<small>{row.sourceDocument || `Baris ${row.sourceRow}`}</small></td><td>{row.description || "-"}</td><td>{row.counterparty || "-"}</td><td><form action={moveFinanceRecordAction} className="finance-move-form"><input name="recordId" type="hidden" value={row.id} /><input name="returnTo" type="hidden" value={returnTo} /><select aria-label={`Pindahkan kategori transaksi ${row.description || row.id}`} defaultValue={row.financeCategory} name="financeCategory">{FINANCE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select><button type="submit">Pindahkan</button></form></td><td className="numeric-cell"><strong>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</strong></td></tr>) : <tr><td colSpan={6}>Tidak ada transaksi yang cocok dengan filter.</td></tr>}</tbody></table>
+      <tbody>{rows.length ? rows.map((row) => <tr key={row.id}><td><strong>{dateLabel(row.transactionDate)}</strong><small>{row.transactionTime}</small></td><td>{row.sourceSheet}<small>{row.sourceDocument || `Baris ${row.sourceRow}`}</small></td><td>{row.description || "-"}</td><td>{row.counterparty || "-"}</td><td><form action={moveFinanceRecordAction} className="finance-move-form"><input name="recordId" type="hidden" value={row.id} /><input name="returnTo" type="hidden" value={returnTo} /><select aria-label={`Pindahkan kategori transaksi ${row.description || row.id}`} defaultValue={normalizeFinanceCategory(row.financeCategory)} name="financeCategory">{FINANCE_CATEGORIES.map((item) => <option key={item} value={item}>{item}</option>)}</select><button type="submit">Pindahkan</button></form></td><td className="numeric-cell"><strong>{row.direction === "income" ? "+" : "−"}{money(row.amount)}</strong></td></tr>) : <tr><td colSpan={6}>Tidak ada transaksi yang cocok dengan filter.</td></tr>}</tbody></table>
       <Pagination currentPage={currentPage} params={params} totalItems={totalItems} />
     </div>
   </article>;

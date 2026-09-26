@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "../../../../db";
 import { randomId } from "../../../../db/id";
 import { financeCategoryOverrides, financeRecords, financeSyncCredentials } from "../../../../db/schema";
-import { FINANCE_CATEGORIES } from "../../../finance/constants";
+import { FINANCE_CATEGORIES, normalizeFinanceCategory } from "../../../finance/constants";
 
 type IncomingRecord = {
   sourceKey: string; sourceSheet: string; sourceRow: number;
@@ -23,6 +23,9 @@ export async function POST(request: Request) {
   try { body = (await request.json()) as SyncBody; }
   catch { return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }); }
 
+  if (Array.isArray(body?.records)) body.records = body.records.map((record) => ({
+    ...record, financeCategory: normalizeFinanceCategory(record.financeCategory),
+  }));
   const error = validateBody(body);
   if (error) return NextResponse.json({ error }, { status: 400 });
 
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
   }
   const records = body.records.map((record) => ({
     ...record,
-    financeCategory: overrides.get(record.sourceKey)?.financeCategory || record.financeCategory,
+    financeCategory: normalizeFinanceCategory(overrides.get(record.sourceKey)?.financeCategory || record.financeCategory),
     direction: overrides.get(record.sourceKey)?.direction || record.direction,
   }));
   await db.transaction(async (tx) => {

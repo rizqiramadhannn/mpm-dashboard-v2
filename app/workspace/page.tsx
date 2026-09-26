@@ -23,6 +23,13 @@ const workspaceLinks = [
     type: "Google Sheet",
   },
   {
+    description: "Google Sheet untuk data HPP.",
+    href: "https://docs.google.com/spreadsheets/d/178tWM8-l3IRJnsianCQvgX4cMdePyd_Rc-zHIOV3W5Q/edit?usp=drivesdk",
+    label: "Buka Data HPP",
+    title: "DATA HPP",
+    type: "Google Sheet",
+  },
+  {
     description: "Folder Google Drive utama untuk dokumen MPM.",
     href: "https://drive.google.com/drive/folders/1PoiRTw0QZWAPVr5W7UFSItEAToMdITRN?usp=drive_link",
     label: "Buka Drive MPM",

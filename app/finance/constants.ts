@@ -1,9 +1,13 @@
 export const FINANCE_CATEGORIES = [
-  "Income", "Stock & Penjualan", "Operasional", "Prive/loan", "Komisi",
+  "Income", "Stock", "Penjualan", "Operasional", "Prive/loan", "Komisi",
   "Ongkir", "Refund/reimbursement", "Entertainment", "Biaya bank dan pajak",
 ] as const;
 
 export type FinanceCategory = (typeof FINANCE_CATEGORIES)[number];
+
+export function normalizeFinanceCategory(category: string) {
+  return category === "Stock & Penjualan" ? "Stock" : category;
+}
 
 export const SGA_CATEGORIES: FinanceCategory[] = [
   "Operasional", "Prive/loan", "Komisi", "Ongkir", "Refund/reimbursement",
@@ -13,7 +17,8 @@ export const SGA_CATEGORIES: FinanceCategory[] = [
 export const FINANCE_TABS = [
   { key: "summary", label: "Summary" },
   { key: "sga", label: "SGA" },
-  { key: "stock", label: "Stock & Penjualan" },
+  { key: "stock", label: "Stock" },
+  { key: "sales", label: "Penjualan" },
   { key: "income", label: "Income" },
 ] as const;
 

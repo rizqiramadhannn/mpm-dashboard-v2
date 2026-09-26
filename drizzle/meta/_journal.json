@@ -267,6 +267,13 @@
       "when": 1790297116506,
       "tag": "0041_whatsapp_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1790323352668,
+      "tag": "0042_finance_split_stock_sales",
+      "breakpoints": true
     }
   ]
 }
