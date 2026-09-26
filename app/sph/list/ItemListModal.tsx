@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 export type SphItem = {
   id: string;
@@ -37,7 +38,7 @@ export function ItemListModal({ items, sphNo, triggerLabel, triggerClassName }: 
       </button>
 
       {open ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setOpen(false)}>
           <div aria-modal="true" className="preview-modal item-list-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -84,7 +85,7 @@ export function ItemListModal({ items, sphNo, triggerLabel, triggerClassName }: 
               </table>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

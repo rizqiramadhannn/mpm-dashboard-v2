@@ -1,6 +1,7 @@
 "use client";
 import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../components/ConfigurableTable";
 import { TABLE_COLUMNS } from "../components/tableDefinitions";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 
 import { useMemo, useState, useTransition } from "react";
 import { createBinaryZip } from "../components/binaryZip";
@@ -632,7 +633,7 @@ export function InvoiceLedgerTable({
       </div>
 
       {showDownloadConfirmation ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => { if (!downloadProgress) setShowDownloadConfirmation(false); }}>
           <div
             aria-labelledby="download-all-invoices-title"
             aria-modal="true"
@@ -689,11 +690,11 @@ export function InvoiceLedgerTable({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {preview ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setPreview(null)}>
           <div aria-modal="true" className="preview-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -726,7 +727,7 @@ export function InvoiceLedgerTable({
             ) : null}
             <iframe className="preview-modal-frame" src={previewUrl} title={preview.title} />
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

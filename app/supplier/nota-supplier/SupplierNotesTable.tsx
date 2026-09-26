@@ -1,6 +1,7 @@
 "use client";
 import { ConfigurableTable, TableColumnPicker, TableHeader, TableCell, TableSpanCell } from "../../components/ConfigurableTable";
 import { TABLE_COLUMNS } from "../../components/tableDefinitions";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -575,7 +576,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
       </div>
 
       {preview ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setPreview(null)}>
           <div aria-modal="true" className="preview-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -608,7 +609,7 @@ export function SupplierNotesTable({ notes }: { notes: SupplierNote[] }) {
             ) : null}
             <iframe className="preview-modal-frame" src={previewUrl} title={preview.title} />
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

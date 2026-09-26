@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 import { ItemListModal } from "./ItemListModal";
 
 type SphItem = {
@@ -132,7 +133,7 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
       </button>
 
       {listOpen ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={closeAll}>
           <div
             aria-labelledby="migrate-sph-title"
             aria-modal="true"
@@ -239,11 +240,14 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
               </div>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {monthOpen ? (
-        <div className="preview-modal-backdrop migrate-month-backdrop" role="presentation">
+        <ModalBackdrop
+          className="preview-modal-backdrop migrate-month-backdrop"
+          onClose={() => { if (!isPending) setMonthOpen(false); }}
+        >
           <div
             aria-labelledby="migrate-month-title"
             aria-modal="true"
@@ -301,7 +305,7 @@ export function MigrateSphDialog({ action, rows }: MigrateSphDialogProps) {
               </div>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

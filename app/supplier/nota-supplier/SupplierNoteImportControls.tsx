@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 import { defaultPaymentTerm, paymentTermOptions } from "../../components/paymentTerms";
 
 type PendingImport = {
@@ -511,7 +512,7 @@ export function SupplierNoteImportControls({
       </div>
 
       {uploadOpen ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setUploadOpen(false)}>
           <div aria-modal="true" className="preview-modal supplier-import-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -575,11 +576,11 @@ export function SupplierNoteImportControls({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {pendingOpen ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setPendingOpen(false)}>
           <div aria-modal="true" className="preview-modal supplier-pending-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -642,11 +643,11 @@ export function SupplierNoteImportControls({
               </table>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {jsonOpen ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setJsonOpen(false)}>
           <div aria-modal="true" className="preview-modal supplier-import-json-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -671,11 +672,11 @@ export function SupplierNoteImportControls({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {reviewOpen ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setReviewOpen(false)}>
           <div aria-modal="true" className="preview-modal supplier-review-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -854,7 +855,7 @@ export function SupplierNoteImportControls({
               </div>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

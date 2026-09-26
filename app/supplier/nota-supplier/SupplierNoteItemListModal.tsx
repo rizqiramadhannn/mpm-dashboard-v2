@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ModalBackdrop } from "../../components/ModalBackdrop";
 
 type SupplierNoteItem = {
   id: string;
@@ -39,7 +40,7 @@ export function SupplierNoteItemListModal({
       </button>
 
       {open ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setOpen(false)}>
           <div aria-modal="true" className="preview-modal item-list-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -88,7 +89,7 @@ export function SupplierNoteItemListModal({
               </table>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );

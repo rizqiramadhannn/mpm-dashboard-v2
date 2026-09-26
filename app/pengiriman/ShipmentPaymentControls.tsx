@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ModalBackdrop } from "../components/ModalBackdrop";
 
 type ShipmentMoneyControlProps = {
   amount: number;
@@ -221,7 +222,7 @@ export function ShipmentProofUpload({
       </div>
 
       {preview && previewFile ? (
-        <div className="preview-modal-backdrop" role="presentation">
+        <ModalBackdrop onClose={() => setPreview(null)}>
           <div aria-modal="true" className="preview-modal" role="dialog">
             <div className="preview-modal-header">
               <div className="preview-modal-title">
@@ -248,7 +249,7 @@ export function ShipmentProofUpload({
             ) : null}
             <iframe className="preview-modal-frame" src={previewUrl} title={`Bukti Bayar ${ttbNo}`} />
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </>
   );
