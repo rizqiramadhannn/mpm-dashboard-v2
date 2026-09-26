@@ -1,11 +1,13 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import {
+  appAdminAuditLogs,
   supplierNoteImports,
   supplierNoteItems,
   supplierNotes,
   suppliers,
 } from "../../../db/schema";
+import { correctManualNote } from "../nota-manual/correction-storage";
 
 type SupplierNoteFileInput = {
   name?: unknown;
@@ -64,6 +66,15 @@ export type CreatedSupplierNote = {
 export type SupplierNoteFilePayload = {
   invoiceFile?: SupplierNoteFileInput;
   paymentProofFiles?: unknown;
+};
+
+export type SupplierNoteCorrectionPayload = {
+  expectedNoteNo?: unknown;
+  expectedAmount?: unknown;
+  expectedPaidAmount?: unknown;
+  expectedItems?: unknown;
+  amount?: unknown;
+  items?: unknown;
 };
 
 export type SupplierNoteImportFileInput = {
@@ -275,6 +286,28 @@ function parseItems(value: unknown, fallbackFlag: string) {
       shortCode: asString(item.shortCode),
       flag: asString(item.flag, fallbackFlag) || fallbackFlag,
     };
+  });
+}
+
+function sameCorrectionItems(
+  left: ReturnType<typeof parseItems>,
+  right: ReturnType<typeof parseItems>
+) {
+  return left.length === right.length && left.every((item, index) => {
+    const other = right[index];
+    return Boolean(
+      other &&
+      item.partNumber === other.partNumber &&
+      item.description === other.description &&
+      item.quantity === other.quantity &&
+      item.uom === other.uom &&
+      item.unitPrice === other.unitPrice &&
+      item.totalPrice === other.totalPrice &&
+      item.dueDate === other.dueDate &&
+      item.status === other.status &&
+      item.shortCode === other.shortCode &&
+      item.flag === other.flag
+    );
   });
 }
 
@@ -791,6 +824,168 @@ export async function updateSupplierNotePaidAmount(id: string, paidAmountInput: 
     paymentStatus,
     remainingPayment,
   };
+}
+
+export async function correctSupplierNote(
+  id: string,
+  payload: SupplierNoteCorrectionPayload,
+  ipAddress = "unknown"
+) {
+  const expectedNoteNo = requiredString(payload.expectedNoteNo, "expectedNoteNo");
+  const expectedAmount = asNumber(payload.expectedAmount, Number.NaN);
+  const expectedPaidAmount = asNumber(payload.expectedPaidAmount, Number.NaN);
+  const expectedItems = parseItems(payload.expectedItems, "MPM");
+  const items = parseItems(payload.items, "MPM");
+  const expectedItemTotal = expectedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  const itemTotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const amount = Math.round(asNumber(payload.amount, itemTotal));
+
+  if (!Number.isSafeInteger(expectedAmount) || expectedAmount <= 0) {
+    throw new Error("expectedAmount tidak valid.");
+  }
+  if (
+    !Number.isSafeInteger(expectedPaidAmount) ||
+    expectedPaidAmount < 0 ||
+    expectedPaidAmount > expectedAmount
+  ) {
+    throw new Error("expectedPaidAmount tidak valid.");
+  }
+  if (expectedItemTotal !== expectedAmount) {
+    throw new Error("Total item review tidak cocok.");
+  }
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount !== itemTotal) {
+    throw new Error("Total koreksi tidak cocok dengan jumlah item.");
+  }
+  if (expectedPaidAmount > amount) {
+    throw new Error("Total baru lebih kecil dari pembayaran yang sudah tercatat.");
+  }
+
+  const db = await getDb();
+  const [source] = await db
+    .select({ noteNo: supplierNotes.noteNo, noteSource: supplierNotes.noteSource })
+    .from(supplierNotes)
+    .where(eq(supplierNotes.id, id))
+    .limit(1);
+  if (!source) throw new Error("Nota supplier tidak ditemukan.");
+  if (source.noteNo !== expectedNoteNo) throw new Error("Nota berubah sejak review.");
+  if (source.noteSource === "manual") {
+    return correctManualNote(
+      db,
+      id,
+      { expectedAmount, expectedPaidAmount, expectedItems, items },
+      ipAddress
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const [note] = await tx
+      .select({
+        id: supplierNotes.id,
+        noteNo: supplierNotes.noteNo,
+        amount: supplierNotes.amount,
+        paidAmount: supplierNotes.paidAmount,
+        paymentStatus: supplierNotes.paymentStatus,
+      })
+      .from(supplierNotes)
+      .where(eq(supplierNotes.id, id))
+      .limit(1);
+
+    if (!note) throw new Error("Nota supplier tidak ditemukan.");
+    if (note.paymentStatus === "CANCELLED") {
+      throw new Error("Nota yang sudah dibatalkan tidak dapat dikoreksi.");
+    }
+    if (
+      note.noteNo !== expectedNoteNo ||
+      note.amount !== expectedAmount ||
+      note.paidAmount !== expectedPaidAmount
+    ) {
+      throw new Error("Nota berubah sejak review.");
+    }
+
+    const currentItems = await tx
+      .select({
+        lineNo: supplierNoteItems.lineNo,
+        partNumber: supplierNoteItems.partNumber,
+        description: supplierNoteItems.description,
+        quantity: supplierNoteItems.quantity,
+        uom: supplierNoteItems.uom,
+        unitPrice: supplierNoteItems.unitPrice,
+        totalPrice: supplierNoteItems.totalPrice,
+        dueDate: supplierNoteItems.dueDate,
+        status: supplierNoteItems.status,
+        shortCode: supplierNoteItems.shortCode,
+        flag: supplierNoteItems.flag,
+      })
+      .from(supplierNoteItems)
+      .where(eq(supplierNoteItems.supplierNoteId, id))
+      .orderBy(asc(supplierNoteItems.lineNo));
+    if (!sameCorrectionItems(currentItems, expectedItems)) {
+      throw new Error("Nota berubah sejak review.");
+    }
+    const paymentStatus = paymentStatusFromAmount(amount, note.paidAmount);
+    const remainingPayment = Math.max(amount - note.paidAmount, 0);
+
+    if (note.amount === amount && sameCorrectionItems(currentItems, items)) {
+      return {
+        id,
+        noteNo: note.noteNo,
+        amount,
+        paidAmount: note.paidAmount,
+        paymentStatus,
+        remainingPayment,
+        reused: true,
+      };
+    }
+
+    const [updated] = await tx
+      .update(supplierNotes)
+      .set({
+        amount,
+        itemSummary: items.map((item) => item.description).join("; "),
+        paymentStatus,
+        remainingPayment,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(
+        and(
+          eq(supplierNotes.id, id),
+          eq(supplierNotes.noteNo, expectedNoteNo),
+          eq(supplierNotes.amount, expectedAmount),
+          eq(supplierNotes.paidAmount, expectedPaidAmount)
+        )
+      )
+      .returning({ id: supplierNotes.id });
+    if (!updated) throw new Error("Nota berubah sejak review.");
+
+    await tx.delete(supplierNoteItems).where(eq(supplierNoteItems.supplierNoteId, id));
+    await tx.insert(supplierNoteItems).values(
+      items.map((item) => ({ ...item, supplierNoteId: id }))
+    );
+    await tx.insert(appAdminAuditLogs).values({
+      actorUserId: null,
+      actorUsername: "supplier-notes-api",
+      action: "supplier_note_corrected",
+      ipAddress,
+      detailsJson: {
+        id,
+        noteNo: note.noteNo,
+        previousAmount: note.amount,
+        amount,
+        previousItems: currentItems,
+        items,
+      },
+    });
+
+    return {
+      id,
+      noteNo: note.noteNo,
+      amount,
+      paidAmount: note.paidAmount,
+      paymentStatus,
+      remainingPayment,
+      reused: false,
+    };
+  });
 }
 
 export async function cancelSupplierNote(

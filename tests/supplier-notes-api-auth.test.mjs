@@ -10,7 +10,7 @@ const now = Date.parse("2026-09-15T00:00:00Z");
 
 test("automation scope only permits reviewed nota operations and file GET", () => {
   for (const [path, methods] of [
-    ["/api/supplier-notes", ["GET", "POST"]],
+    ["/api/supplier-notes", ["GET", "POST", "PATCH"]],
     ["/api/supplier-notes/masters", ["GET", "POST"]],
     ["/api/supplier-notes/manual", ["POST"]],
     ["/api/supplier-notes/manual/id_123/correct", ["POST"]],

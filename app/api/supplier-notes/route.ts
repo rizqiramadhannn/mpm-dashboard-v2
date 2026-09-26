@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   cancelSupplierNote,
+  correctSupplierNote,
   createSupplierNote,
   listSupplierNotes,
   updateSupplierNoteFiles,
@@ -139,6 +140,31 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Nota tidak valid." }, { status: 400 });
     }
 
+    const hasCorrection = "amount" in payload || "items" in payload;
+    if (
+      hasCorrection &&
+      (payload.invoiceFile ||
+        payload.paymentProofFile ||
+        payload.paymentProofFiles ||
+        "paidAmount" in payload ||
+        payload.action)
+    ) {
+      return NextResponse.json(
+        { error: "Koreksi nominal/item tidak boleh digabung dengan operasi lain." },
+        { status: 400 }
+      );
+    }
+    if (hasCorrection) {
+      const data = await correctSupplierNote(
+        id,
+        payload,
+        request.headers.get("cf-connecting-ip") ??
+          request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+          "unknown"
+      );
+      return NextResponse.json({ data });
+    }
+
     const paymentProofFiles =
       payload.paymentProofFiles ??
       (payload.paymentProofFile ? [payload.paymentProofFile] : undefined);
@@ -162,7 +188,11 @@ export async function PATCH(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Gagal mengubah nota supplier.";
-    const status = message.includes("tidak ditemukan") ? 404 : 400;
+    const status = message.includes("tidak ditemukan")
+      ? 404
+      : message.includes("sejak review")
+        ? 409
+        : 400;
 
     return NextResponse.json({ error: message }, { status });
   }
