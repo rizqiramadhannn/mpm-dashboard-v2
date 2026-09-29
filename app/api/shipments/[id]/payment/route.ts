@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getDb } from "../../../../../db";
-import { shipments } from "../../../../../db/schema";
+import { shipmentJourneys, shipments } from "../../../../../db/schema";
 import { getCurrentUser, recordActivityLog } from "../../../../auth";
 
 type StoredFile = {
@@ -64,6 +64,7 @@ export async function POST(
         paidAmount: shipments.paidAmount,
         paymentProofFilesJson: shipments.paymentProofFilesJson,
         shippingCost: shipments.shippingCost,
+        landShippingCost: shipments.landShippingCost,
       })
       .from(shipments)
       .where(eq(shipments.id, id))
@@ -81,6 +82,10 @@ export async function POST(
       : [];
     const newFiles = await Promise.all(uploadedFiles.map(storedFile));
     const nextShippingCost = shippingCost ?? shipment.shippingCost;
+    const nextLandShippingCost = shipment.landShippingCost + nextShippingCost - shipment.shippingCost;
+    if (nextLandShippingCost < 0) {
+      throw new Error("Ongkir tidak boleh lebih kecil dari jumlah biaya selain ongkir darat.");
+    }
     const requestedPaidAmount = paidAmount ?? shipment.paidAmount;
     const nextPaidAmount = Math.min(
       requestedPaidAmount,
@@ -95,8 +100,15 @@ export async function POST(
         paidAmount: nextPaidAmount,
         paymentProofFilesJson: [...existingFiles, ...newFiles],
         shippingCost: nextShippingCost,
+        landShippingCost: nextLandShippingCost,
       })
       .where(eq(shipments.id, id));
+    if (shippingCost !== null) {
+      await db.update(shipmentJourneys).set({
+        shippingCost: nextShippingCost,
+        landShippingCost: nextLandShippingCost,
+      }).where(eq(shipmentJourneys.shipmentId, id));
+    }
     if (user) {
       await recordActivityLog({
         action: "shipment_payment_updated",
@@ -111,6 +123,7 @@ export async function POST(
     }
 
     revalidatePath("/pengiriman");
+    revalidatePath("/invoice");
 
     return NextResponse.json({
       data: {

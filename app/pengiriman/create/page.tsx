@@ -13,6 +13,8 @@ import {
   sphItems,
 } from "../../../db/schema";
 import { recordActivityLog, requireUser } from "../../auth";
+import { ShippingCostFields } from "../ShippingCostFields";
+import { parseShippingCosts, totalShippingCosts } from "../shipping-costs";
 import { listSuppliers } from "../../supplier/data";
 import { CreateShipmentItemsTable } from "./CreateShipmentItemsTable";
 
@@ -116,7 +118,8 @@ async function createShipmentAction(formData: FormData) {
   const shippingVendor = formText(formData, "shippingVendor");
   const latestStatus = formText(formData, "latestStatus") || "TERJADWAL";
   const notes = formText(formData, "notes");
-  const shippingCost = parseAmount(formData.get("shippingCost"), "Ongkir");
+  const shippingCosts = parseShippingCosts(formData);
+  const shippingCost = totalShippingCosts(shippingCosts);
 
   if (!destination) {
     throw new Error("Tujuan pengiriman wajib diisi.");
@@ -204,6 +207,7 @@ async function createShipmentAction(formData: FormData) {
       quantity: sendQty,
       shipmentId: "",
       shippingCost,
+      ...shippingCosts,
       shippingVendor,
       sphItemId: item.itemId,
       splitNo: (maxSplitNoByItem.get(item.itemId) ?? 0) + 1,
@@ -226,6 +230,7 @@ async function createShipmentAction(formData: FormData) {
       shipmentDate,
       shipmentNo,
       shippingCost,
+      ...shippingCosts,
       shippingVendor,
     })
     .returning({ id: shipments.id });
@@ -389,10 +394,7 @@ export default async function CreatePengirimanPage() {
               <span>Vendor Pengiriman</span>
               <input name="shippingVendor" placeholder="Nama vendor / ekspedisi" />
             </label>
-            <label>
-              <span>Biaya Kirim</span>
-              <input min="0" name="shippingCost" placeholder="0" type="number" />
-            </label>
+            <ShippingCostFields />
             <label className="full-width">
               <span>Asal</span>
               <input name="origin" placeholder="Gudang / lokasi supplier" />

@@ -13,6 +13,7 @@ import {
 } from "../../../db/schema";
 import { recordActivityLog, requireUser } from "../../auth";
 import { ShipmentJourneyForm } from "./ShipmentJourneyForm";
+import { totalShippingCosts } from "../shipping-costs";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,11 @@ async function updateShipmentJourneyAction(formData: FormData) {
   const shipmentIdByJourneyId = new Map(
     existingJourneys.map((journey) => [journey.id, journey.shipmentId])
   );
+  const attachedShipmentIds = [...new Set(existingJourneys.map((journey) => journey.shipmentId).filter((id): id is string => Boolean(id)))];
+  const attachedShipments = attachedShipmentIds.length
+    ? await db.select().from(shipments).where(inArray(shipments.id, attachedShipmentIds))
+    : [];
+  const attachedShipmentById = new Map(attachedShipments.map((shipment) => [shipment.id, shipment]));
   const journeyValues: (typeof shipmentJourneys.$inferInsert)[] = [];
 
   for (const item of itemRows) {
@@ -192,8 +198,18 @@ async function updateShipmentJourneyAction(formData: FormData) {
     const batch = batchDetails.get(journey.batchNo ?? 1);
 
     if (batch) {
+      const header = journey.shipmentId ? attachedShipmentById.get(journey.shipmentId) : undefined;
+      const costs = {
+        handlingCost: header?.handlingCost ?? 0,
+        airShippingCost: header?.airShippingCost ?? 0,
+        seaShippingCost: header?.seaShippingCost ?? 0,
+        landShippingCost: batch.shippingCost,
+        maximShippingCost: header?.maximShippingCost ?? 0,
+        otherShippingCost: header?.otherShippingCost ?? 0,
+      };
       journey.isShippingPaid = batch.isShippingPaid;
-      journey.shippingCost = batch.shippingCost;
+      journey.shippingCost = totalShippingCosts(costs);
+      Object.assign(journey, costs);
       journey.shippingVendor = batch.shippingVendor;
     }
   }
@@ -216,11 +232,12 @@ async function updateShipmentJourneyAction(formData: FormData) {
     await db
       .update(shipments)
       .set({
-        isShippingPaid: batch.shippingCost > 0 ? batch.isShippingPaid : false,
+        isShippingPaid: (journeyValues.find((journey) => journey.shipmentId === shipmentId)?.shippingCost ?? 0) > 0 ? batch.isShippingPaid : false,
         latestStatus: batch.allCustomerReceived
           ? "TERKIRIM"
           : batch.latestStatus || "TERJADWAL",
-        shippingCost: batch.shippingCost,
+        shippingCost: journeyValues.find((journey) => journey.shipmentId === shipmentId)?.shippingCost ?? batch.shippingCost,
+        landShippingCost: batch.shippingCost,
         shippingVendor: batch.shippingVendor,
         updatedAt: new Date().toISOString(),
       })
@@ -344,7 +361,7 @@ export default async function PengirimanDetailPage({
             destination: shipmentJourneys.destination,
             latestStatus: shipmentJourneys.latestStatus,
             shippingVendor: shipmentJourneys.shippingVendor,
-            shippingCost: shipmentJourneys.shippingCost,
+            shippingCost: shipmentJourneys.landShippingCost,
             isShippingPaid: shipmentJourneys.isShippingPaid,
             customerReceived: shipmentJourneys.customerReceived,
           })

@@ -11,6 +11,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function formatMoney(amount: number) {
+  return new Intl.NumberFormat("id-ID", {
+    currency: "IDR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(amount);
+}
+
 function fallbackTtbNo(dateValue: string | null, customerCode: string) {
   const yearMonth = dateValue?.slice(0, 7).replace("-", "");
 
@@ -492,12 +500,13 @@ export default async function PengirimanPage({
                       </td>
                       <td>
                         <div className="stacked-cell">
-                          <ShipmentMoneyControl
-                            amount={shipment.shippingCost}
-                            field="shippingCost"
-                            label="Ongkir"
-                            shipmentId={shipment.shipmentId}
-                          />
+                          {shipment.shipmentId ? (
+                            <Link className="paid-amount-display" href={`/pengiriman/edit/${shipment.shipmentId}`}>
+                              Ongkir {formatMoney(shipment.shippingCost)}
+                            </Link>
+                          ) : (
+                            <strong>Ongkir {formatMoney(shipment.shippingCost)}</strong>
+                          )}
                         </div>
                       </td>
                       <td>

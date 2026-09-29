@@ -445,7 +445,7 @@ export function ShipmentJourneyForm({
                   </label>
 
                   <label>
-                    <span>Biaya Kirim</span>
+                    <span>Ongkir darat</span>
                     <input
                       min="0"
                       onChange={(event) =>

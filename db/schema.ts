@@ -175,6 +175,12 @@ export const shipments = sqliteTable(
     destination: text("destination").notNull().default(""),
     shippingVendor: text("shipping_vendor").notNull().default(""),
     shippingCost: integer("shipping_cost").notNull().default(0),
+    handlingCost: integer("handling_cost").notNull().default(0),
+    airShippingCost: integer("air_shipping_cost").notNull().default(0),
+    seaShippingCost: integer("sea_shipping_cost").notNull().default(0),
+    landShippingCost: integer("land_shipping_cost").notNull().default(0),
+    maximShippingCost: integer("maxim_shipping_cost").notNull().default(0),
+    otherShippingCost: integer("other_shipping_cost").notNull().default(0),
     isShippingPaid: integer("is_shipping_paid", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -231,6 +237,12 @@ export const shipmentJourneys = sqliteTable(
     latestStatus: text("latest_status").notNull().default(""),
     shippingVendor: text("shipping_vendor").notNull().default(""),
     shippingCost: integer("shipping_cost").notNull().default(0),
+    handlingCost: integer("handling_cost").notNull().default(0),
+    airShippingCost: integer("air_shipping_cost").notNull().default(0),
+    seaShippingCost: integer("sea_shipping_cost").notNull().default(0),
+    landShippingCost: integer("land_shipping_cost").notNull().default(0),
+    maximShippingCost: integer("maxim_shipping_cost").notNull().default(0),
+    otherShippingCost: integer("other_shipping_cost").notNull().default(0),
     isShippingPaid: integer("is_shipping_paid", { mode: "boolean" })
       .notNull()
       .default(false),

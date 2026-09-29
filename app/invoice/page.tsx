@@ -15,6 +15,7 @@ import {
   sphItems,
 } from "../../db/schema";
 import { InvoiceLedgerTable, type LedgerRow } from "./InvoiceLedgerTable";
+import { totalShippingCosts } from "../pengiriman/shipping-costs";
 
 export const dynamic = "force-dynamic";
 
@@ -400,7 +401,13 @@ export default async function InvoicePage({
       ? await db
           .select({
             batchNo: shipmentJourneys.batchNo,
-            shippingCost: shipmentJourneys.shippingCost,
+            shipmentId: shipmentJourneys.shipmentId,
+            handlingCost: shipmentJourneys.handlingCost,
+            airShippingCost: shipmentJourneys.airShippingCost,
+            seaShippingCost: shipmentJourneys.seaShippingCost,
+            landShippingCost: shipmentJourneys.landShippingCost,
+            maximShippingCost: shipmentJourneys.maximShippingCost,
+            otherShippingCost: shipmentJourneys.otherShippingCost,
             sphItemId: shipmentJourneys.sphItemId,
           })
           .from(shipmentJourneys)
@@ -413,10 +420,10 @@ export default async function InvoicePage({
     const sphId = sphIdByItem.get(journey.sphItemId);
 
     if (sphId) {
-      const batchKey = `${sphId}:${journey.batchNo}`;
+      const batchKey = `${sphId}:${journey.shipmentId ?? `batch-${journey.batchNo}`}`;
       ongkirBatchCostBySph.set(
         batchKey,
-        Math.max(ongkirBatchCostBySph.get(batchKey) ?? 0, journey.shippingCost)
+        Math.max(ongkirBatchCostBySph.get(batchKey) ?? 0, totalShippingCosts(journey))
       );
     }
   }

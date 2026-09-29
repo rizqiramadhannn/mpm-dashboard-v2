@@ -13,6 +13,8 @@ import {
 } from "../../../../db/schema";
 import { recordActivityLog, requireUser } from "../../../auth";
 import { listSuppliers } from "../../../supplier/data";
+import { ShippingCostFields } from "../../ShippingCostFields";
+import { parseShippingCosts, totalShippingCosts } from "../../shipping-costs";
 
 export const dynamic = "force-dynamic";
 
@@ -155,7 +157,8 @@ async function updateShipmentAction(formData: FormData) {
   const shippingVendor = formText(formData, "shippingVendor");
   const formStatus = formText(formData, "latestStatus") || "TERJADWAL";
   const notes = formText(formData, "notes");
-  const shippingCost = parseAmount(formData.get("shippingCost"), "Ongkir");
+  const shippingCosts = parseShippingCosts(formData);
+  const shippingCost = totalShippingCosts(shippingCosts);
   const journeyIds = formData
     .getAll("journeyId")
     .filter((value): value is string => typeof value === "string" && value.trim() !== "")
@@ -178,6 +181,15 @@ async function updateShipmentAction(formData: FormData) {
   }
 
   const db = await getDb();
+  const [currentShipment] = await db
+    .select({ paidAmount: shipments.paidAmount })
+    .from(shipments)
+    .where(eq(shipments.id, shipmentId))
+    .limit(1);
+  if (!currentShipment) {
+    throw new Error("Pengiriman tidak ditemukan.");
+  }
+  const isShippingPaid = shippingCost > 0 && currentShipment.paidAmount >= shippingCost;
   const currentJourneys = await db
     .select({
       customerReceived: shipmentJourneys.customerReceived,
@@ -263,6 +275,8 @@ async function updateShipmentAction(formData: FormData) {
         origin,
         quantity,
         shippingCost,
+        ...shippingCosts,
+        isShippingPaid,
         shippingVendor,
         supplierId: supply.supplierId,
         supplyType: supply.supplyType,
@@ -279,6 +293,8 @@ async function updateShipmentAction(formData: FormData) {
       notes,
       shipmentDate,
       shippingCost,
+      ...shippingCosts,
+      isShippingPaid,
       shippingVendor,
       updatedAt: new Date().toISOString(),
     })
@@ -326,6 +342,12 @@ export default async function EditShipmentPage({
       shipmentDate: shipments.shipmentDate,
       shipmentNo: shipments.shipmentNo,
       shippingCost: shipments.shippingCost,
+      handlingCost: shipments.handlingCost,
+      airShippingCost: shipments.airShippingCost,
+      seaShippingCost: shipments.seaShippingCost,
+      landShippingCost: shipments.landShippingCost,
+      maximShippingCost: shipments.maximShippingCost,
+      otherShippingCost: shipments.otherShippingCost,
       shippingVendor: shipments.shippingVendor,
     })
     .from(shipments)
@@ -410,16 +432,7 @@ export default async function EditShipmentPage({
                 placeholder="Nama vendor / ekspedisi"
               />
             </label>
-            <label>
-              <span>Biaya Kirim</span>
-              <input
-                defaultValue={shipment.shippingCost || ""}
-                min="0"
-                name="shippingCost"
-                placeholder="0"
-                type="number"
-              />
-            </label>
+            <ShippingCostFields values={shipment} />
             <label className="full-width">
               <span>Asal</span>
               <input
