@@ -30,6 +30,13 @@ const workspaceLinks = [
     type: "Google Sheet",
   },
   {
+    description: "Google Sheet untuk data FREDI.",
+    href: "https://docs.google.com/spreadsheets/d/1r-URAO6iDVKJaFZBsKON2vK0mFay_CxpNm4hHdrD44w/edit?gid=0#gid=0",
+    label: "Buka FREDI",
+    title: "FREDI",
+    type: "Google Sheet",
+  },
+  {
     description: "Folder Google Drive utama untuk dokumen MPM.",
     href: "https://drive.google.com/drive/folders/1PoiRTw0QZWAPVr5W7UFSItEAToMdITRN?usp=drive_link",
     label: "Buka Drive MPM",
