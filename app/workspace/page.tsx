@@ -1,56 +1,5 @@
 import { AppShell } from "../components/AppShell";
-
-const workspaceLinks = [
-  {
-    description: "Google Sheet untuk daftar pekerjaan dan follow up.",
-    href: "https://docs.google.com/spreadsheets/d/17qN6D0PGfeKQryk2cDFzEcCyEOrdqjkZ2Y9WzvOn3_Q/edit?usp=drivesdk",
-    label: "Buka Todo List",
-    title: "Todo List",
-    type: "Google Sheet",
-  },
-  {
-    description: "Google Sheet tambahan untuk kebutuhan operasional.",
-    href: "https://docs.google.com/spreadsheets/d/1zm61TtddG1wI3zLyDqe3ooXXvT85oV39aWucC1h6o6s/edit?usp=sharing",
-    label: "Buka Sheet",
-    title: "Operational Sheet",
-    type: "Google Sheet",
-  },
-  {
-    description: "Google Sheet tambahan untuk workspace.",
-    href: "https://docs.google.com/spreadsheets/d/1tnVXBG0wqy8qI92_WRwBCPjWi65_DXMx8cXcRYE6iY8/edit?usp=sharing",
-    label: "Buka Sheet",
-    title: "Data Pengiriman Ban BCK",
-    type: "Google Sheet",
-  },
-  {
-    description: "Google Sheet untuk data HPP.",
-    href: "https://docs.google.com/spreadsheets/d/178tWM8-l3IRJnsianCQvgX4cMdePyd_Rc-zHIOV3W5Q/edit?usp=drivesdk",
-    label: "Buka Data HPP",
-    title: "DATA HPP",
-    type: "Google Sheet",
-  },
-  {
-    description: "Google Sheet untuk data FREDI.",
-    href: "https://docs.google.com/spreadsheets/d/1r-URAO6iDVKJaFZBsKON2vK0mFay_CxpNm4hHdrD44w/edit?gid=0#gid=0",
-    label: "Buka FREDI",
-    title: "FREDI",
-    type: "Google Sheet",
-  },
-  {
-    description: "Folder Google Drive utama untuk dokumen MPM.",
-    href: "https://drive.google.com/drive/folders/1PoiRTw0QZWAPVr5W7UFSItEAToMdITRN?usp=drive_link",
-    label: "Buka Drive MPM",
-    title: "GDrive MPM",
-    type: "Google Drive",
-  },
-  {
-    description: "Folder Google Drive untuk dokumen Roda.",
-    href: "https://drive.google.com/drive/folders/12hnjyDsjoOTqCjWeW6y3btqugQpcfO9F?usp=drive_link",
-    label: "Buka Drive Roda",
-    title: "GDrive Roda",
-    type: "Google Drive",
-  },
-];
+import workspaceLinks from "../../config/workspace-links.json";
 
 export default function WorkspacePage() {
   return (
