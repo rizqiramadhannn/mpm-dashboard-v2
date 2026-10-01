@@ -39,6 +39,7 @@ export type LedgerRow = {
   status: string;
   statusClassName: string;
   ttdMateraiFile: InvoiceFile | null;
+  signedTtbFile: InvoiceFile | null;
   totalAmount: number;
 };
 
@@ -49,7 +50,7 @@ type PreviewState = {
   invoiceId: string;
   selectedIndex: number;
   title: string;
-  type: "ttd" | "paymentProof";
+  type: "ttd" | "paymentProof" | "ttb";
 } | null;
 
 type InvoiceLedgerTableProps = {
@@ -171,6 +172,7 @@ export function InvoiceLedgerTable({
         { header: "TANGGAL BAYAR", value: (row) => row.paymentDate, width: 16 },
         { header: "AGING", value: (row) => row.aging, width: 10 },
         { header: "TTD MATERAI", value: (row) => row.ttdMateraiFile?.name ?? "", width: 24 },
+        { header: "TTB", value: (row) => row.signedTtbFile?.name ?? "", width: 24 },
         {
           header: "BUKTI BAYAR",
           value: (row) => row.paymentProofFiles.map((file) => file.name).join(", "),
@@ -419,11 +421,14 @@ export function InvoiceLedgerTable({
     );
   }
 
-  function fileCell(row: LedgerRow, type: "ttd" | "paymentProof") {
-    const files =
-      type === "ttd" ? (row.ttdMateraiFile ? [row.ttdMateraiFile] : []) : row.paymentProofFiles;
+  function fileCell(row: LedgerRow, type: "ttd" | "paymentProof" | "ttb") {
+    const files = type === "ttd"
+      ? (row.ttdMateraiFile ? [row.ttdMateraiFile] : [])
+      : type === "ttb"
+        ? (row.signedTtbFile ? [row.signedTtbFile] : [])
+        : row.paymentProofFiles;
     const uploadKey = `${row.invoiceId}:${type}`;
-    const label = type === "ttd" ? "TTD Materai" : "Bukti Bayar";
+    const label = type === "ttd" ? "TTD Materai" : type === "ttb" ? "TTB" : "Bukti Bayar";
 
     async function uploadFiles(filesToUpload: FileList | null) {
       if (!row.invoiceId || !filesToUpload || filesToUpload.length === 0) {
@@ -439,6 +444,8 @@ export function InvoiceLedgerTable({
 
       if (type === "ttd") {
         formData.set("ttdMateraiFile", filesToUpload[0]);
+      } else if (type === "ttb") {
+        formData.set("signedTtbFile", filesToUpload[0]);
       } else {
         Array.from(filesToUpload).forEach((file) => {
           formData.append("paymentProofFiles", file);
@@ -476,6 +483,13 @@ export function InvoiceLedgerTable({
                         size: result.data.ttdMateraiFileSize,
                       }
                     : currentRow.ttdMateraiFile,
+                  signedTtbFile: result.data.ttbSignedFileName
+                    ? {
+                        mimeType: result.data.ttbSignedFileMimeType,
+                        name: result.data.ttbSignedFileName,
+                        size: result.data.ttbSignedFileSize,
+                      }
+                    : currentRow.signedTtbFile,
                 }
               : currentRow
           )
@@ -510,7 +524,7 @@ export function InvoiceLedgerTable({
         ) : null}
         <label className="file-upload-button">
           <input
-            accept="application/pdf,image/*"
+            accept={type === "ttb" ? "application/pdf,image/jpeg,image/png" : "application/pdf,image/*"}
             disabled={!row.invoiceId}
             multiple={type === "paymentProof"}
             onChange={(event) => {
@@ -576,6 +590,7 @@ export function InvoiceLedgerTable({
             <TableHeader columnId="c15">TANGGAL BAYAR</TableHeader>
             <TableHeader columnId="c16">AGING</TableHeader>
             <TableHeader columnId="c17">TTD MATERAI</TableHeader>
+            <TableHeader columnId="c20">TTB</TableHeader>
             <TableHeader columnId="c18">BUKTI BAYAR</TableHeader>
             <TableHeader columnId="c19">ACTION</TableHeader>
           </tr>
@@ -611,6 +626,7 @@ export function InvoiceLedgerTable({
                 <TableCell columnId="c15">{row.paymentDate}</TableCell>
                 <TableCell columnId="c16">{row.aging}</TableCell>
                 <TableCell columnId="c17">{fileCell(row, "ttd")}</TableCell>
+                <TableCell columnId="c20">{fileCell(row, "ttb")}</TableCell>
                 <TableCell columnId="c18">{fileCell(row, "paymentProof")}</TableCell>
                 <TableCell columnId="c19">
                   {row.invoiceId ? (

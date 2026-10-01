@@ -355,6 +355,11 @@ export const invoiceDocuments = sqliteTable(
     ttdMateraiFileSize: integer("ttd_materai_file_size").notNull().default(0),
     ttdMateraiFileBase64: text("ttd_materai_file_base64").notNull().default(""),
     ttdMateraiFileSha256: text("ttd_materai_file_sha256").notNull().default(""),
+    ttbSignedFileName: text("ttb_signed_file_name").notNull().default(""),
+    ttbSignedFileMimeType: text("ttb_signed_file_mime_type").notNull().default(""),
+    ttbSignedFileSize: integer("ttb_signed_file_size").notNull().default(0),
+    ttbSignedFileBase64: text("ttb_signed_file_base64").notNull().default(""),
+    ttbSignedFileSha256: text("ttb_signed_file_sha256").notNull().default(""),
     paymentProofFilesJson: text("invoice_payment_proof_files_json", {
       mode: "json",
     })

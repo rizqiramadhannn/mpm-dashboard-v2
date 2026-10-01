@@ -76,6 +76,10 @@ export const TABLE_COLUMNS = {
       "label": "TTD MATERAI"
     },
     {
+      "id": "c20",
+      "label": "TTB"
+    },
+    {
       "id": "c18",
       "label": "BUKTI BAYAR"
     },

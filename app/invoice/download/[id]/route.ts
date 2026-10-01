@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { invoiceDocuments, invoiceItems, sphDocuments } from "../../../../db/schema";
 import { LOGO_JPEG_BASE64 } from "../../../sph/download/[id]/assets";
+import { appendSignedTtb } from "../../signed-ttb-pdf";
 
 type InvoiceDocument = {
   amountInWords: string;
@@ -547,6 +548,7 @@ export async function GET(
       sphNo: sphDocuments.sphNo,
       sphStatus: sphDocuments.status,
       totalAmount: invoiceDocuments.totalAmount,
+      ttbSignedFileBase64: invoiceDocuments.ttbSignedFileBase64,
     })
     .from(invoiceDocuments)
     .leftJoin(sphDocuments, eq(invoiceDocuments.sphId, sphDocuments.id))
@@ -571,7 +573,15 @@ export async function GET(
     .where(eq(invoiceItems.invoiceId, id));
   items.sort((a, b) => a.lineNo - b.lineNo);
 
-  return new Response(createPdf(document, items), {
+  const invoicePdf = createPdf(document, items);
+  const pdf = document.ttbSignedFileBase64
+    ? await appendSignedTtb(
+        invoicePdf,
+        Uint8Array.from(Buffer.from(document.ttbSignedFileBase64, "base64"))
+      )
+    : invoicePdf;
+
+  return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Disposition": `attachment; filename="${document.invoiceNo}.pdf"`,
       "Content-Type": "application/pdf",

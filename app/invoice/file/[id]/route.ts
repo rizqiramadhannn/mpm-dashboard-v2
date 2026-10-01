@@ -27,7 +27,8 @@ export async function GET(
 ) {
   const { id } = await params;
   const { searchParams } = new URL(request.url);
-  const fileType = searchParams.get("type") === "paymentProof" ? "paymentProof" : "ttd";
+  const requestedType = searchParams.get("type");
+  const fileType = requestedType === "paymentProof" || requestedType === "ttb" ? requestedType : "ttd";
   const fileIndex = Number(searchParams.get("index") ?? "0");
   const inline = searchParams.get("inline") === "1";
 
@@ -40,6 +41,10 @@ export async function GET(
     .select({
       invoiceNo: invoiceDocuments.invoiceNo,
       paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
+      ttbSignedFileBase64: invoiceDocuments.ttbSignedFileBase64,
+      ttbSignedFileMimeType: invoiceDocuments.ttbSignedFileMimeType,
+      ttbSignedFileName: invoiceDocuments.ttbSignedFileName,
+      ttbSignedFileSize: invoiceDocuments.ttbSignedFileSize,
       ttdMateraiFileBase64: invoiceDocuments.ttdMateraiFileBase64,
       ttdMateraiFileMimeType: invoiceDocuments.ttdMateraiFileMimeType,
       ttdMateraiFileName: invoiceDocuments.ttdMateraiFileName,
@@ -60,6 +65,15 @@ export async function GET(
   const file: InvoiceStoredFile | null =
     fileType === "paymentProof"
       ? selectedProof ?? null
+      : fileType === "ttb"
+        ? invoice.ttbSignedFileBase64
+          ? {
+              base64: invoice.ttbSignedFileBase64,
+              mimeType: invoice.ttbSignedFileMimeType,
+              name: invoice.ttbSignedFileName,
+              size: invoice.ttbSignedFileSize,
+            }
+          : null
       : invoice.ttdMateraiFileBase64
         ? {
             base64: invoice.ttdMateraiFileBase64,
@@ -76,6 +90,8 @@ export async function GET(
   const fallback =
     fileType === "paymentProof"
       ? `${invoice.invoiceNo}-bukti-bayar.pdf`
+      : fileType === "ttb"
+        ? `${invoice.invoiceNo}-ttb-ttd.pdf`
       : `${invoice.invoiceNo}-ttd-materai.pdf`;
   const fileName = safeFileName(file.name, fallback);
   const disposition = inline ? "inline" : "attachment";

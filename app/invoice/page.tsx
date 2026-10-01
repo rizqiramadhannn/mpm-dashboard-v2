@@ -44,6 +44,9 @@ type InvoiceRow = {
   ttdMateraiFileMimeType: string;
   ttdMateraiFileName: string;
   ttdMateraiFileSize: number;
+  ttbSignedFileMimeType: string;
+  ttbSignedFileName: string;
+  ttbSignedFileSize: number;
   totalAmount: number;
 };
 
@@ -270,6 +273,9 @@ async function ensureInvoicesForSph(sphRows: SphRow[], invoiceRows: InvoiceRow[]
         ttdMateraiFileMimeType: invoiceDocuments.ttdMateraiFileMimeType,
         ttdMateraiFileName: invoiceDocuments.ttdMateraiFileName,
         ttdMateraiFileSize: invoiceDocuments.ttdMateraiFileSize,
+        ttbSignedFileMimeType: invoiceDocuments.ttbSignedFileMimeType,
+        ttbSignedFileName: invoiceDocuments.ttbSignedFileName,
+        ttbSignedFileSize: invoiceDocuments.ttbSignedFileSize,
         totalAmount: invoiceDocuments.totalAmount,
       });
     insertedInvoices.push(insertedInvoice);
@@ -361,6 +367,9 @@ export default async function InvoicePage({
             ttdMateraiFileMimeType: invoiceDocuments.ttdMateraiFileMimeType,
             ttdMateraiFileName: invoiceDocuments.ttdMateraiFileName,
             ttdMateraiFileSize: invoiceDocuments.ttdMateraiFileSize,
+            ttbSignedFileMimeType: invoiceDocuments.ttbSignedFileMimeType,
+            ttbSignedFileName: invoiceDocuments.ttbSignedFileName,
+            ttbSignedFileSize: invoiceDocuments.ttbSignedFileSize,
             totalAmount: invoiceDocuments.totalAmount,
           })
           .from(invoiceDocuments)
@@ -488,6 +497,13 @@ export default async function InvoicePage({
             mimeType: invoice.ttdMateraiFileMimeType,
             name: invoice.ttdMateraiFileName,
             size: invoice.ttdMateraiFileSize,
+          }
+        : null,
+      signedTtbFile: invoice?.ttbSignedFileName
+        ? {
+            mimeType: invoice.ttbSignedFileMimeType,
+            name: invoice.ttbSignedFileName,
+            size: invoice.ttbSignedFileSize,
           }
         : null,
       totalAmount,

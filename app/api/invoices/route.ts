@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "../../../db";
 import { invoiceDocuments, sphDocuments } from "../../../db/schema";
 import { getCurrentUser, recordActivityLog } from "../../auth";
+import { validateSignedTtb } from "../../invoice/signed-ttb-pdf";
 
 export const dynamic = "force-dynamic";
 
@@ -76,12 +77,20 @@ async function payloadFromRequest(request: Request) {
     const formData = await request.formData();
     const payload: Record<string, unknown> = Object.fromEntries(formData.entries());
     const ttdMateraiFile = formData.get("ttdMateraiFile");
+    const signedTtbFile = formData.get("signedTtbFile");
     const paymentProofFiles = formData
       .getAll("paymentProofFiles")
       .filter((value): value is File => value instanceof File);
 
     if (ttdMateraiFile instanceof File) {
       payload.ttdMateraiFile = await filePayload(ttdMateraiFile);
+    }
+
+    if (signedTtbFile instanceof File) {
+      if (signedTtbFile.size === 0 || signedTtbFile.size > 15 * 1024 * 1024) {
+        throw new Error("Ukuran file TTB harus antara 1 byte dan 15 MB.");
+      }
+      payload.signedTtbFile = await filePayload(signedTtbFile);
     }
 
     if (paymentProofFiles.length > 0) {
@@ -150,6 +159,24 @@ export async function PATCH(request: Request) {
       updates.ttdMateraiFileSha256 = file.sha256;
     }
 
+    if (payload.signedTtbFile) {
+      const file = payload.signedTtbFile as InvoiceStoredFile;
+      if (typeof file.base64 !== "string" || typeof file.name !== "string" ||
+          file.base64.length > Math.ceil(15 * 1024 * 1024 * 4 / 3) + 4) {
+        throw new Error("File TTB tidak valid atau melebihi 15 MB.");
+      }
+      const bytes = Uint8Array.from(Buffer.from(file.base64, "base64"));
+      if (bytes.length === 0 || bytes.length > 15 * 1024 * 1024) {
+        throw new Error("Ukuran file TTB harus antara 1 byte dan 15 MB.");
+      }
+      updates.ttbSignedFileName =
+        file.name.replace(/[\\/:*?"<>|\x00-\x1f]+/g, "-").trim() || "TTB";
+      updates.ttbSignedFileMimeType = await validateSignedTtb(bytes);
+      updates.ttbSignedFileSize = bytes.length;
+      updates.ttbSignedFileBase64 = file.base64;
+      updates.ttbSignedFileSha256 = sha256(file.base64);
+    }
+
     if (payload.paymentProofFiles) {
       const existingFiles = Array.isArray(invoice.paymentProofFilesJson)
         ? invoice.paymentProofFilesJson
@@ -174,6 +201,7 @@ export async function PATCH(request: Request) {
               : 0,
             status: updates.status,
             ttdMateraiUpdated: Boolean(payload.ttdMateraiFile),
+            signedTtbUpdated: Boolean(payload.signedTtbFile),
           },
         });
       }
@@ -186,9 +214,12 @@ export async function PATCH(request: Request) {
       data: {
         id,
         ...updates,
+        ttbSignedFileBase64: undefined,
+        ttdMateraiFileBase64: undefined,
+        paymentProofFilesJson: undefined,
         paymentProofFiles: (updates.paymentProofFilesJson ??
           invoice.paymentProofFilesJson ??
-          []) as InvoiceStoredFile[],
+          []).map((file) => ({ name: file.name, mimeType: file.mimeType, size: file.size })),
       },
     });
   } catch (error) {
