@@ -109,6 +109,7 @@ export async function PATCH(request: Request) {
       .select({
         sphStatus: sphDocuments.status,
         paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
+        processedAt: invoiceDocuments.processedAt,
         status: invoiceDocuments.status,
         totalAmount: invoiceDocuments.totalAmount,
       })
@@ -134,7 +135,10 @@ export async function PATCH(request: Request) {
       const paidAmount = parseAmount(payload.paidAmount);
       updates.paidAmount = paidAmount;
       updates.status = paymentStatus(invoice.totalAmount, paidAmount, invoice.status);
-      updates.processedAt = updates.status === "done" ? new Date().toISOString() : null;
+      updates.processedAt =
+        updates.status === "done"
+          ? invoice.processedAt ?? new Date().toISOString()
+          : null;
     }
 
     if (payload.ttdMateraiFile) {

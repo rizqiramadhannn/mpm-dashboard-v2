@@ -554,8 +554,45 @@ a {
   grid-column: span 4;
 }
 
-.dashboard-card:not(.cashflow-card):not(.chart-card) {
+.dashboard-card:not(.cashflow-card):not(.chart-card):not(.monthly-payments-card) {
   grid-column: span 2;
+}
+
+.dashboard-card.monthly-payments-card {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.monthly-payments-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.monthly-payment-item {
+  background: #f8fafc;
+  border: 1px solid #e7ebf2;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+}
+
+.monthly-payment-item span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.monthly-payment-item strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.monthly-payment-item small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .card-heading {
@@ -3075,7 +3112,8 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
 
   .stats-grid,
   .dashboard-grid,
-  .cashflow-summary {
+  .cashflow-summary,
+  .monthly-payments-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3089,7 +3127,8 @@ table[data-has-hidden-columns="true"] { min-width: 0 !important; }
 
   .cashflow-card,
   .chart-card,
-  .dashboard-card:not(.cashflow-card):not(.chart-card) {
+  .dashboard-card.monthly-payments-card,
+  .dashboard-card:not(.cashflow-card):not(.chart-card):not(.monthly-payments-card) {
     grid-column: auto;
   }
 

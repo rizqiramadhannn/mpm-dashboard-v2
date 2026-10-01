@@ -103,6 +103,7 @@ async function updateShipmentJourneyAction(formData: FormData) {
   const itemIds = itemRows.map((item) => item.id);
   const existingJourneys = await db
     .select({
+      customerReceivedAt: shipmentJourneys.customerReceivedAt,
       id: shipmentJourneys.id,
       shipmentId: shipmentJourneys.shipmentId,
     })
@@ -110,6 +111,9 @@ async function updateShipmentJourneyAction(formData: FormData) {
     .where(inArray(shipmentJourneys.sphItemId, itemIds));
   const shipmentIdByJourneyId = new Map(
     existingJourneys.map((journey) => [journey.id, journey.shipmentId])
+  );
+  const receivedAtByJourneyId = new Map(
+    existingJourneys.map((journey) => [journey.id, journey.customerReceivedAt])
   );
   const attachedShipmentIds = [...new Set(existingJourneys.map((journey) => journey.shipmentId).filter((id): id is string => Boolean(id)))];
   const attachedShipments = attachedShipmentIds.length
@@ -136,7 +140,9 @@ async function updateShipmentJourneyAction(formData: FormData) {
         destination: formText(formData, `destination-${item.id}-${splitKey}`),
         isShippingPaid: formData.get(`isShippingPaid-${item.id}-${splitKey}`) === "on",
         customerReceived,
-        customerReceivedAt: customerReceived ? new Date().toISOString() : null,
+        customerReceivedAt: customerReceived
+          ? receivedAtByJourneyId.get(splitKey) || new Date().toISOString()
+          : null,
         latestStatus: customerReceived
           ? "TERKIRIM"
           : formText(formData, `latestStatus-${item.id}-${splitKey}`),

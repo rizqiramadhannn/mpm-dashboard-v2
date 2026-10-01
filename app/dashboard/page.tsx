@@ -13,6 +13,7 @@ import {
   supplierNotes,
   suppliers,
 } from "../../db/schema";
+import { completedDeliveryDates, summarizeMonthlyPayments } from "./payment-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +53,6 @@ type MonthlyCashflow = {
   income: number;
   month: string;
 };
-
-function monthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
 
 function dateKey(value: string | null) {
   return value?.slice(0, 10) ?? "";
@@ -106,13 +103,6 @@ function formatPercent(value: number, total: number) {
   }
 
   return `${Math.round((value / total) * 100)}%`;
-}
-
-function addMonths(date: Date, offset: number) {
-  const result = new Date(date);
-  result.setDate(1);
-  result.setMonth(result.getMonth() + offset);
-  return result;
 }
 
 function isInvoicePaid(status: string) {
@@ -167,16 +157,20 @@ function pushActivity(
 async function getDashboardData() {
   const db = await getDb();
   const now = new Date();
-  const currentMonth = monthKey(now);
   const today = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     month: "2-digit",
     timeZone: "Asia/Jakarta",
     year: "numeric",
   }).format(now);
-  const months = Array.from({ length: 7 }, (_, index) => addMonths(now, index - 6));
-  const monthKeys = months.map(monthKey);
-  const monthLabels = months.map((date) => monthNames[date.getMonth()]);
+  const currentMonth = today.slice(0, 7);
+  const [currentYear, currentMonthNumber] = currentMonth.split("-").map(Number);
+  const months = Array.from(
+    { length: 7 },
+    (_, index) => new Date(Date.UTC(currentYear, currentMonthNumber + index - 7, 1))
+  );
+  const monthKeys = months.map((date) => date.toISOString().slice(0, 7));
+  const monthLabels = months.map((date) => monthNames[date.getUTCMonth()]);
 
   const [rawInvoices, sphRows, supplierNoteRows, shipmentRows, sphItemRows] =
     await Promise.all([
@@ -188,6 +182,8 @@ async function getDashboardData() {
           invoiceNo: invoiceDocuments.invoiceNo,
           paidAmount: invoiceDocuments.paidAmount,
           paymentDueDate: invoiceDocuments.paymentDueDate,
+          paymentTerm: invoiceDocuments.paymentTerm,
+          processedAt: invoiceDocuments.processedAt,
           sphId: invoiceDocuments.sphId,
           status: invoiceDocuments.status,
           totalAmount: invoiceDocuments.totalAmount,
@@ -223,8 +219,11 @@ async function getDashboardData() {
         .select({
           batchNo: shipmentJourneys.batchNo,
           createdAt: shipmentJourneys.createdAt,
+          customerReceived: shipmentJourneys.customerReceived,
+          customerReceivedAt: shipmentJourneys.customerReceivedAt,
           isShippingPaid: shipmentJourneys.isShippingPaid,
           latestStatus: shipmentJourneys.latestStatus,
+          quantity: shipmentJourneys.quantity,
           shippingCost: shipmentJourneys.shippingCost,
           sphItemId: shipmentJourneys.sphItemId,
         })
@@ -232,6 +231,7 @@ async function getDashboardData() {
       db
         .select({
           id: sphItems.id,
+          quantity: sphItems.quantity,
           sphId: sphItems.sphId,
         })
         .from(sphItems),
@@ -239,6 +239,8 @@ async function getDashboardData() {
 
   const validSphIds = new Set(sphRows.filter((sph) => isInvoiceEligibleSph(sph.status)).map((sph) => sph.id));
   const invoices = rawInvoices.filter((invoice) => validSphIds.has(invoice.sphId));
+  const completedDeliveryBySph = completedDeliveryDates(sphItemRows, shipmentRows);
+  const monthlyPayments = summarizeMonthlyPayments(invoices, currentMonth, completedDeliveryBySph);
   const sphIdByItem = new Map(sphItemRows.map((item) => [item.id, item.sphId]));
   const sphByInternalId = new Map(sphRows.map((sph) => [sph.id, sph]));
   const shipmentBatchTotal = (
@@ -473,6 +475,7 @@ async function getDashboardData() {
       },
     ],
     monthlyCashflow,
+    monthlyPayments,
     period: formatPeriod(now),
     stats,
     topCustomers: rankingFromMap(topCustomerValues),
@@ -506,6 +509,24 @@ export default async function DashboardPage() {
         </div>
 
         <div className="dashboard-grid">
+          <article className="dashboard-card monthly-payments-card">
+            <div className="card-heading">
+              <div>
+                <h2>Pembayaran bulan ini</h2>
+                <p>Invoice lunas bulan ini. CBD: H+2 pembuatan invoice; COD: H+2 seluruh item diterima. Lewat tenggat masuk Overdue.</p>
+              </div>
+            </div>
+            <div className="monthly-payments-grid">
+              {(["COD", "CBD", "On Due", "Overdue"] as const).map((category) => (
+                <div className="monthly-payment-item" key={category}>
+                  <span>{category}</span>
+                  <strong>{formatCompactMoney(dashboard.monthlyPayments[category].amount)}</strong>
+                  <small>{dashboard.monthlyPayments[category].count} invoice</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
           <article className="dashboard-card cashflow-card">
             <div className="card-heading">
               <div>
