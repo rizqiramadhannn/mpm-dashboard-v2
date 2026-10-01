@@ -48,6 +48,7 @@ export default async function SupplierNotesPage({
   const query = getSearchParam(params, "q").trim().toLowerCase();
   const paymentFilter = getSearchParam(params, "payment");
   const flagFilter = getSearchParam(params, "flag");
+  const excludeManual = getSearchParam(params, "excludeManual") === "1";
   const fromDate = getSearchParam(params, "from");
   const toDate = getSearchParam(params, "to");
   const [notes, customers, suppliers] = await Promise.all([
@@ -88,8 +89,9 @@ export default async function SupplierNotesPage({
         : note.paymentStatus === paymentFilter);
     const matchesFlag = !flagFilter || note.flag === flagFilter;
     const matchesDate = isWithinDateRange(note.noteDate, fromDate, toDate);
+    const matchesSource = !excludeManual || note.noteSource !== "manual";
 
-    return matchesQuery && matchesPayment && matchesFlag && matchesDate;
+    return matchesQuery && matchesPayment && matchesFlag && matchesDate && matchesSource;
   });
   const { pageRows, safePage } = paginateRows(filteredNotes, getCurrentPage(params));
   const totals = filteredNotes.reduce(
@@ -164,6 +166,13 @@ export default async function SupplierNotesPage({
             </select>
           </label>
           <DateRangeFilter from={fromDate} to={toDate} />
+          <label>
+            <span>Nota Manual</span>
+            <select name="excludeManual" defaultValue={excludeManual ? "1" : ""}>
+              <option value="">Semua Nota</option>
+              <option value="1">Exclude Nota Manual</option>
+            </select>
+          </label>
           <div className="table-filter-actions">
             <button type="submit">Filter</button>
             <Link href="/supplier/nota-supplier">Reset</Link>
@@ -175,6 +184,7 @@ export default async function SupplierNotesPage({
             query,
             paymentFilter,
             flagFilter,
+            excludeManual,
             fromDate,
             toDate,
             safePage,
