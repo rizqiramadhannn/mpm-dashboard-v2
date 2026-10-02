@@ -30,6 +30,7 @@ export type LedgerRow = {
   ongkirAmount: number;
   paidAmount: number;
   paymentDate: string;
+  paymentDateRaw: string;
   paymentDueDate: string;
   paymentProofFiles: InvoiceFile[];
   paymentTerm: string;
@@ -55,6 +56,7 @@ type PreviewState = {
 
 type InvoiceLedgerTableProps = {
   canUpdatePaidAmount: boolean;
+  canUpdatePaymentDate: boolean;
   filteredInvoices: {
     customerName: string;
     hasTtdMaterai: boolean;
@@ -128,11 +130,16 @@ function formatPercent(value: number, total: number) {
 
 export function InvoiceLedgerTable({
   canUpdatePaidAmount,
+  canUpdatePaymentDate,
   filteredInvoices,
   rows,
   updateLedgerAmountAction,
 }: InvoiceLedgerTableProps) {
   const [localRows, setLocalRows] = useState(rows);
+  const [paymentDateEdit, setPaymentDateEdit] = useState<LedgerRow | null>(null);
+  const [draftPaymentDate, setDraftPaymentDate] = useState("");
+  const [savingPaymentDate, setSavingPaymentDate] = useState(false);
+  const [paymentDateError, setPaymentDateError] = useState("");
   const [editing, setEditing] = useState<{ rowId: string; field: EditableField } | null>(
     null
   );
@@ -293,6 +300,7 @@ export function InvoiceLedgerTable({
           ? {
               ...currentRow,
               paidAmount: result.data.paidAmount,
+              paymentDateRaw: result.data.processedAt?.slice(0, 10) ?? "",
               paymentDate: result.data.processedAt
                 ? new Intl.DateTimeFormat("id-ID", {
                     day: "2-digit",
@@ -306,6 +314,35 @@ export function InvoiceLedgerTable({
           : currentRow
       )
     );
+  }
+
+  async function savePaymentDate() {
+    if (!paymentDateEdit?.invoiceId || savingPaymentDate) return;
+    setSavingPaymentDate(true);
+    setPaymentDateError("");
+    try {
+      const response = await fetch("/api/invoices", {
+        body: JSON.stringify({ id: paymentDateEdit.invoiceId, paymentDate: draftPaymentDate }),
+        headers: { "content-type": "application/json" },
+        method: "PATCH",
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Gagal mengubah tanggal bayar.");
+      const rawDate = result.data.processedAt.slice(0, 10);
+      const formattedDate = new Intl.DateTimeFormat("id-ID", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+      }).format(new Date(`${rawDate}T00:00:00`));
+      setLocalRows((current) => current.map((row) =>
+        row.invoiceId === paymentDateEdit.invoiceId
+          ? { ...row, paymentDateRaw: rawDate, paymentDate: formattedDate }
+          : row
+      ));
+      setPaymentDateEdit(null);
+    } catch (error) {
+      setPaymentDateError(error instanceof Error ? error.message : "Gagal mengubah tanggal bayar.");
+    } finally {
+      setSavingPaymentDate(false);
+    }
   }
 
   function commitEdit() {
@@ -623,7 +660,23 @@ export function InvoiceLedgerTable({
                   </span>
                 </TableCell>
                 <TableCell columnId="c14">{row.paymentDueDate}</TableCell>
-                <TableCell columnId="c15">{row.paymentDate}</TableCell>
+                <TableCell columnId="c15">
+                  {canUpdatePaymentDate && row.invoiceId && row.status === "LUNAS" ? (
+                    <button
+                      className="ledger-edit-button"
+                      title="Klik untuk mengubah tanggal bayar"
+                      aria-label={`Ubah tanggal bayar ${row.invoiceNo}`}
+                      onClick={() => {
+                        setPaymentDateEdit(row);
+                        setDraftPaymentDate(row.paymentDateRaw);
+                        setPaymentDateError("");
+                      }}
+                      type="button"
+                    >
+                      {row.paymentDate} ✎
+                    </button>
+                  ) : row.paymentDate}
+                </TableCell>
                 <TableCell columnId="c16">{row.aging}</TableCell>
                 <TableCell columnId="c17">{fileCell(row, "ttd")}</TableCell>
                 <TableCell columnId="c20">{fileCell(row, "ttb")}</TableCell>
@@ -647,6 +700,40 @@ export function InvoiceLedgerTable({
         </tbody>
         </ConfigurableTable>
       </div>
+
+      {paymentDateEdit ? (
+        <ModalBackdrop onClose={() => { if (!savingPaymentDate) setPaymentDateEdit(null); }}>
+          <form
+            aria-labelledby="payment-date-title"
+            aria-modal="true"
+            className="download-confirmation-modal"
+            role="dialog"
+            onSubmit={(event) => { event.preventDefault(); void savePaymentDate(); }}
+          >
+            <h2 id="payment-date-title">Ubah tanggal bayar</h2>
+            <p>{paymentDateEdit.invoiceNo} — {paymentDateEdit.customerName}</p>
+            <p>Pilih tanggal pembayaran sebenarnya, meskipun bukti bayar diunggah belakangan.</p>
+            <label htmlFor="invoice-payment-date">Tanggal bayar</label>
+            <input
+              autoFocus
+              id="invoice-payment-date"
+              type="date"
+              min="1900-01-01"
+              required
+              disabled={savingPaymentDate}
+              value={draftPaymentDate}
+              onChange={(event) => setDraftPaymentDate(event.target.value)}
+            />
+            {paymentDateError ? <p role="alert">{paymentDateError}</p> : null}
+            <div className="download-confirmation-actions">
+              <button className="secondary-button" disabled={savingPaymentDate} onClick={() => setPaymentDateEdit(null)} type="button">Batal</button>
+              <button className="primary-button" disabled={savingPaymentDate || !draftPaymentDate} type="submit">
+                {savingPaymentDate ? "Menyimpan..." : "Simpan tanggal bayar"}
+              </button>
+            </div>
+          </form>
+        </ModalBackdrop>
+      ) : null}
 
       {showDownloadConfirmation ? (
         <ModalBackdrop onClose={() => { if (!downloadProgress) setShowDownloadConfirmation(false); }}>

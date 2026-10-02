@@ -70,6 +70,32 @@ test('column picker persistence, isolation, validation, sorting, dialogs and exp
     const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download Excel',exact:true}).click();const file=await download;const bytes=await fs.readFile(await file.path());assert.ok(bytes.includes(Buffer.from('OMSET')),'Hidden columns remain in exported workbook');
     await fs.mkdir(path.resolve('outputs'),{recursive:true});
     await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.resolve('outputs/table-columns-mobile.png'),fullPage:true});
+    assert.equal(await page.getByRole('button',{name:'Ubah tanggal bayar INV001'}).count(),0);
+    await page.goto(url+'?paymentAdmin=1');
+    const dateButton = page.getByRole('button',{name:'Ubah tanggal bayar INV001'});
+    await dateButton.click();
+    assert.equal(await page.getByLabel('Tanggal bayar',{exact:true}).inputValue(),'2026-10-02');
+    await page.getByLabel('Tanggal bayar',{exact:true}).fill('2026-09-30');
+    let paymentPayload;
+    await page.route('**/api/invoices', async route => {
+      paymentPayload = route.request().postDataJSON();
+      await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'Gagal menyimpan tanggal'})});
+    });
+    await page.getByRole('button',{name:'Simpan tanggal bayar',exact:true}).click();
+    await page.getByRole('alert').waitFor();
+    assert.equal(await page.getByLabel('Tanggal bayar',{exact:true}).inputValue(),'2026-09-30');
+    await page.unroute('**/api/invoices');
+    await page.route('**/api/invoices', async route => {
+      paymentPayload = route.request().postDataJSON();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data:{processedAt:'2026-09-30T00:00:00.000Z'}})});
+    });
+    await page.getByRole('button',{name:'Simpan tanggal bayar',exact:true}).click();
+    await page.getByRole('dialog').waitFor({state:'hidden'});
+    assert.deepEqual(paymentPayload,{id:'inv1',paymentDate:'2026-09-30'});
+    assert.match(await dateButton.textContent(),/30\/09\/2026/);
+    await dateButton.click();
+    assert.equal(await page.getByLabel('Tanggal bayar',{exact:true}).inputValue(),'2026-09-30');
+    await page.getByRole('button',{name:'Batal',exact:true}).click();
     assert.deepEqual(errors,[]);
   } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
 });

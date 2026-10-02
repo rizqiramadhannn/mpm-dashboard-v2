@@ -7,6 +7,7 @@ import { getDb } from "../../../db";
 import { invoiceDocuments, sphDocuments } from "../../../db/schema";
 import { getCurrentUser, recordActivityLog } from "../../auth";
 import { validateSignedTtb } from "../../invoice/signed-ttb-pdf";
+import { invoicePaymentTimestamp } from "../../invoice/payment-date";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,12 @@ export async function PATCH(request: Request) {
   try {
     const user = await getCurrentUser();
     const payload = await payloadFromRequest(request);
+    if ("paymentDate" in payload && user?.role !== "superadmin") {
+      return NextResponse.json(
+        { error: "Hanya admin yang dapat mengubah tanggal bayar invoice." },
+        { status: 403 }
+      );
+    }
     const id = typeof payload.id === "string" ? payload.id.trim() : "";
 
     if (!id) {
@@ -148,6 +155,16 @@ export async function PATCH(request: Request) {
         updates.status === "done"
           ? invoice.processedAt ?? new Date().toISOString()
           : null;
+    }
+
+    if ("paymentDate" in payload) {
+      if ((updates.status ?? invoice.status) !== "done") {
+        return NextResponse.json(
+          { error: "Tanggal bayar hanya dapat diubah untuk invoice lunas." },
+          { status: 400 }
+        );
+      }
+      updates.processedAt = invoicePaymentTimestamp(payload.paymentDate);
     }
 
     if (payload.ttdMateraiFile) {
@@ -196,6 +213,8 @@ export async function PATCH(request: Request) {
           details: {
             invoiceId: id,
             paidAmount: updates.paidAmount,
+            previousPaymentDate: "paymentDate" in payload ? invoice.processedAt : undefined,
+            paymentDate: updates.processedAt,
             paymentProofFilesAdded: payload.paymentProofFiles
               ? (payload.paymentProofFiles as InvoiceStoredFile[]).length
               : 0,

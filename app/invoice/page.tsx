@@ -479,6 +479,7 @@ export default async function InvoicePage({
       ongkirAmount,
       paidAmount,
       paymentDate: invoice?.processedAt ? formatDate(invoice.processedAt) : "-",
+      paymentDateRaw: invoice?.processedAt?.slice(0, 10) ?? "",
       paymentDueDate: formatDate(dueDate),
       paymentProofFiles:
         invoice?.paymentProofFilesJson?.map((file) => ({
@@ -642,6 +643,7 @@ export default async function InvoicePage({
             ttdMateraiFileName: row.ttdMateraiFile?.name ?? "",
           }))}
           canUpdatePaidAmount={user.username.toLowerCase() === "superadmin"}
+          canUpdatePaymentDate={user.role === "superadmin"}
           rows={pageRows}
           updateLedgerAmountAction={updateLedgerAmountAction}
         />
