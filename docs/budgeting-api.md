@@ -53,10 +53,11 @@ tersedia agar bisa ditelusuri; filter status untuk kebutuhan budgeting.
 | `dueStatus` | `overdue`, `on_due`, `upcoming`, `no_due_date`, `settled`, `cancelled` |
 | `customerId` | Hanya invoice; ID customer dari SPH, nullable untuk data historis |
 | `supplierId` | Hanya nota supplier |
+| `reportMonth` | Hanya invoice, `YYYY-MM` (tahun 1900–9998); menambahkan `monthlyReport` |
 
 Semua tanggal `YYYY-MM-DD`. Parameter tidak dikenal, berulang, tanggal tidak valid,
 rentang terbalik, atau filter identitas yang tidak sesuai menghasilkan 400.
-Detail hanya menerima `asOf`; ID tidak ditemukan/tidak eligible menghasilkan 404.
+Detail menerima `asOf` dan, untuk invoice, `reportMonth`; ID tidak ditemukan/tidak eligible menghasilkan 404.
 Kegagalan database menghasilkan 500 dengan pesan generik tanpa credential.
 
 Urutan daftar: tanggal dokumen descending, lalu ID ascending. Response daftar:
@@ -117,8 +118,9 @@ waktu server. Nota memakai `paymentDeadline`; kosong menghasilkan `null`.
 Tidak ada estimasi deadline supplier dari term atau item.
 
 `asOf` hanya mengevaluasi aging **saldo pembayaran saat ini**, bukan rekonstruksi
-saldo historis pada tanggal tersebut. Tidak tersedia daftar riwayat cicilan pada
-schema dokumen ini. Aging: cancelled → `cancelled`; saldo nol → `settled`;
+saldo historis pada tanggal tersebut. Untuk laporan bulanan berbasis event
+pembayaran, gunakan `reportMonth` sebagaimana dijelaskan di bawah.
+Aging: cancelled → `cancelled`; saldo nol → `settled`;
 deadline kosong → `no_due_date`; deadline sebelum/sama/setelah asOf →
 `overdue`/`on_due`/`upcoming`. `isOverdue`, `isOnDue`, `daysPastDue` (minimal 0),
 `daysUntilDue` (minimal 0, null bila settled/cancelled/tidak ada deadline) dan
@@ -218,3 +220,125 @@ setiap baris item karena akan menggandakan total.
 query SQL, filter, pagination, detail/404, projection data privat, DP/lunas/cancelled,
 aging, error generik, dan kesamaan snapshot sebelum/sesudah pembacaan.
 Tidak membutuhkan credential database, sync, atau akses production.
+
+## Laporan invoice bulanan dan pembayaran faktual
+
+`GET /api/budgeting/invoices?reportMonth=2026-10&page=1&pageSize=200`
+atau `GET /api/budgeting/invoices/{id}?reportMonth=2026-10` menambahkan
+`data[].monthlyReport` / `data.monthlyReport`. Token, endpoint, dan field existing
+tetap sama. Nota supplier tidak menerima reportMonth (400).
+
+Ambil **semua halaman**, kemudian klasifikasikan A/B dari dueDate dokumen:
+A `< 2026-10-01`, B `>= 2026-10-01 && <= 2026-10-31`. Jangan menyaring berdasarkan
+paidAmount/remainingPayment/paymentStatus saat ini: invoice yang lunas selama
+Oktober tetap memiliki target dan penerimaan Oktober. API menolak kombinasi
+reportMonth dengan filter `paymentStatus` atau `dueStatus` (400) untuk mencegah
+invoice lunas yang diperlukan hilang. Filter identitas, tanggal dokumen, dan
+due date tetap tersedia, tetapi jangan membatasi tanggal invoice hanya Oktober
+jika laporan juga membutuhkan invoice overdue dari bulan sebelumnya.
+
+| Field `monthlyReport` | Kontrak |
+| --- | --- |
+| `reportMonth`, `periodStart`, `periodEndExclusive`, `timeZone` | Bulan kalender WIB; Oktober `[2026-10-01, 2026-11-01)` |
+| `targetAmount` | Total invoice saat ini dikurangi pembayaran sebelum awal periode, minimal nol; invoice yang belum terbit sampai akhir periode bernilai 0. Tidak berkurang oleh penerimaan selama periode |
+| `openingRemaining` | Sisa piutang sebelum awal periode; invoice yang terbit selama periode memiliki saldo awal 0 |
+| `receivedInPeriod` | Jumlah event penerimaan faktual yang tanggalnya berada dalam periode; **null** jika alokasi histori periode belum lengkap |
+| `knownReceivedInPeriod` | Jumlah event penerimaan yang dapat diidentifikasi dalam periode; informasi parsial jika receivedInPeriod null, bukan pengganti total terverifikasi |
+| `closingRemaining` | Sisa piutang sebelum periodEndExclusive, memakai tanggal tiap event, bukan saldo saat ini |
+| `paymentsInPeriod` | Event efektif `{paymentId, amount, paymentDate, corrected}` setelah koreksi; tidak ada log/aktor admin |
+| `cashflowComplete` | Seluruh penerimaan periode dapat dipastikan dari histori yang tersedia |
+| `balanceComplete` | Target, saldo awal dan saldo akhir dapat dipastikan |
+| `historyComplete` | cashflowComplete dan balanceComplete |
+| `historyStatus` | Kelengkapan histori keseluruhan: `complete`, `partial`, `unavailable`; dapat berbeda dengan historyComplete untuk satu periode setelah saldo lama telah diketahui |
+| `historyReasons` | Kode alasan, seperti `legacy_unallocated_balance`, `legacy_payment_changes`, `unallocated_balance_correction`, `broken_event_chain`, `balance_not_reconciled`; tanpa isi audit/identitas |
+| `knownPaidAmount`, `unallocatedNetPaidAmount` | Total event penerimaan efektif yang diketahui dan selisih terhadap paidAmount kumulatif saat ini; selisih dapat signed pada koreksi saldo |
+| `inclusionStatus` | `include` bila ada saldo atau penerimaan dalam periode; `exclude` bila seluruhnya nol dan lengkap, atau dokumen saat ini cancelled; `review_required` bila belum dapat dipastikan |
+| `balanceBasis` | `current_invoice_total`: riwayat nominal/tagihan, due date, pembatalan dan eligibility SPH tidak direkonstruksi dari schema pembayaran |
+| `evaluatedAt`, `periodEnded` | Waktu evaluasi dan apakah periode sudah selesai; bulan berjalan/future hanya mencerminkan pencatatan yang tersedia saat sync, bukan prediksi atau snapshot terkunci |
+
+Mapping tujuh kolom spreadsheet: No (nomor baris), Customer (`customerName`),
+No Invoice (`invoiceNo`), Due Date (`dueDate`), Target Oktober (`targetAmount`),
+Dana masuk Oktober (`receivedInPeriod`), Sisa akhir Oktober (`closingRemaining`).
+Jangan mengubah null menjadi 0. Tampilkan "Belum terverifikasi" atau kosong dengan
+penanda yang jelas, dan pertahankan baris `review_required` untuk pemeriksaan.
+`knownReceivedInPeriod` dapat ditampilkan dalam catatan, dengan penanda parsial;
+koreksi saldo yang tidak dialokasikan dapat berarti nilai ini juga perlu ditinjau.
+Sinkronisasi dilakukan manual; API ini tidak memasang trigger spreadsheet.
+
+Contoh invoice Rp1.000.000: receipt Rp400.000 tanggal 30 September, receipt
+Rp600.000 tanggal 10 Oktober. Oktober memiliki target/saldo awal Rp600.000,
+dana masuk Rp600.000, saldo akhir 0, inclusionStatus include. November memiliki
+target/saldo awal/dana masuk/saldo akhir 0 dan inclusionStatus exclude.
+Jika cicilan terakhir Rp300.000 baru diterima 1 November, sisa akhir Oktober
+tetap Rp300.000, meskipun invoice saat ini sudah lunas.
+
+**Data lama:** paidAmount kumulatif dan processedAt tanggal pelunasan tidak
+membuktikan bahwa seluruh paidAmount diterima pada tanggal tersebut. API tidak
+mengurangkan saldo kumulatif antar-log lama untuk mengarang event cicilan.
+Saldo yang sudah terbukti lunas sebelum awal bulan dapat dikecualikan dari
+piutang bulan berikutnya, tetapi jumlah penerimaan bulan pelunasannya tetap null
+jika tanggal/nominal setiap penerimaan tidak tersedia. Edit saldo lama yang lebih
+baru dari tanggal pelunasan membuat batas kepastian lebih konservatif.
+Untuk saldo parsial lama tanpa tanggal yang memadai, saldo awal historis dan
+target dapat null. Tidak ada backfill atau perubahan data production otomatis.
+
+## Pencatatan dan koreksi pembayaran invoice ke depan
+
+Form Terbayar invoice meminta jenis perubahan dan tanggal dana benar-benar
+diterima (WIB). Backend menyimpan perubahan invoice dan event versi 1 dalam
+`app_admin_audit_logs.details_json.paymentHistory` pada **satu transaksi**,
+menggunakan action `invoice_updated` existing. Tidak ada schema/migration.
+Audit yang mendasari event harus dipertahankan; penghapusan/perubahan di luar
+alur ini dapat menyebabkan histori tidak lengkap/tidak konsisten.
+
+Endpoint tulis existing `/api/invoices` tetap membutuhkan sesi browser dan izin
+admin existing; token budgeting tidak dapat memanggilnya. Perubahan cumulative
+paidAmount memerlukan expectedPaidAmount dan jenis perubahan eksplisit.
+Contoh payload di bawah hanya untuk client admin berotorisasi, **bukan** Apps Script:
+
+```json
+{
+  "id": "invoice-id",
+  "expectedPaidAmount": 400000,
+  "paidAmount": 1000000,
+  "paymentKind": "receipt",
+  "receivedDate": "2026-10-10"
+}
+```
+
+Selisih positif Rp600.000 dicatat sebagai satu receipt. Tanggal tidak boleh di
+masa depan, saldo memakai integer rupiah safe/nonnegatif. Perubahan saldo menurun
+atau koreksi administratif memakai `paymentKind: "correction"` dan
+`correctionReason` (3–500 karakter); ini **bukan** penerimaan kas dan alokasi
+historis tetap ditandai tidak lengkap. Refund bukan penerimaan positif dan tidak
+dipetakan menjadi cash receipt melalui koreksi saldo.
+
+Koreksi tepat satu event faktual menggunakan paymentId yang dikembalikan
+`paymentsInPeriod` atau response pencatatan; nominal/tanggal pengganti harus
+disampaikan sekaligus, tidak digabung paidAmount/paymentDate:
+
+```json
+{
+  "id": "invoice-id",
+  "expectedPaidAmount": 1000000,
+  "paymentEventId": "payment-id",
+  "paymentEventAmount": 500000,
+  "paymentEventDate": "2026-10-09",
+  "correctionReason": "Nominal dan tanggal disesuaikan dengan bukti bayar"
+}
+```
+
+Backend menyesuaikan paidAmount dengan selisih koreksi dan menyimpan amendment;
+report membaca satu receipt efektif, bukan dua penerimaan. Nominal 0 membatalkan
+receipt salah. Koreksi tanggal pelunasan existing hanya memindahkan tanggal
+receipt final yang faktual, apabila tersedia; untuk invoice legacy, koreksi
+processedAt tetap tidak mengubah saldo kumulatif menjadi penerimaan bertanggal.
+Tanggal nominal/status/file yang disimpan bersama audit bersifat atomik;
+saldo yang berubah sejak dibuka menghasilkan 409. Kegagalan audit membatalkan
+update invoice. Setelah timeout/konflik, muat ulang dan rekonsiliasi sebelum retry.
+
+`npm run test:invoice-payment-history` memverifikasi cicilan lintas bulan,
+lunas Oktober/tidak terbawa November, pembayaran November tidak masuk Oktober,
+batas WIB, koreksi event, data legacy, konflik saldo dan rollback audit. Tes API
+budgeting juga memeriksa reportMonth/detail/pagination, penolakan filter status
+saat ini, serta bahwa aktor/IP/ID audit tidak keluar di response.

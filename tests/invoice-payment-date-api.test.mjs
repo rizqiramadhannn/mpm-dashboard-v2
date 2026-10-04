@@ -19,6 +19,13 @@ mock.module("../app/auth.ts", { namedExports: {
   getCurrentUser: async () => user,
   recordActivityLog: async (entry) => { audit = entry; },
 } });
+mock.module("../app/invoice/payment-history-storage.ts", { namedExports: {
+  persistInvoiceChange: async (_db, _invoice, updates, _payload, details) => {
+    saved = updates; audit = { details: { ...details, paymentDate: updates.processedAt } }; return updates;
+  },
+  InvoiceChangeConflict: class extends Error {},
+  InvalidPaymentChange: class extends Error {},
+} });
 mock.module("next/cache", { namedExports: { revalidatePath: () => {} } });
 mock.module("next/server", { namedExports: { NextResponse: { json: (body, init) => Response.json(body, init) } } });
 const { PATCH } = await import("../app/api/invoices/route.ts");
@@ -37,7 +44,7 @@ const patch = (payload) => PATCH(new Request("http://localhost/api/invoices", {
 test("only admins may correct a payment date, including via direct API calls", async () => {
   for (const actor of [null, { username: "user", role: "user" }]) {
     reset(); user = actor;
-    assert.equal((await patch({ paymentDate: "2026-09-30" })).status, 403);
+    assert.equal((await patch({ paymentDate: "2026-09-30" })).status, actor ? 403 : 401);
     assert.equal(saved, undefined);
   }
 });

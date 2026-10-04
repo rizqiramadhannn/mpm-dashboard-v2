@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getDb } from "../../../db";
 import { invoiceDocuments, sphDocuments } from "../../../db/schema";
-import { getCurrentUser, recordActivityLog } from "../../auth";
+import { getCurrentUser } from "../../auth";
+import { persistInvoiceChange, InvoiceChangeConflict, InvalidPaymentChange } from "../../invoice/payment-history-storage";
 import { validateSignedTtb } from "../../invoice/signed-ttb-pdf";
 import { invoicePaymentTimestamp } from "../../invoice/payment-date";
 
@@ -36,6 +37,7 @@ function sha256(value: string) {
 }
 
 function parseAmount(value: unknown) {
+  if (typeof value === "string" && value.includes("-")) throw new Error("Nominal terbayar harus nonnegatif.");
   const raw =
     typeof value === "string"
       ? value.replace(/[^\d]/g, "")
@@ -44,7 +46,7 @@ function parseAmount(value: unknown) {
         : "";
   const amount = raw ? Number(raw) : 0;
 
-  if (!Number.isInteger(amount) || amount < 0) {
+  if (!Number.isSafeInteger(amount) || amount < 0) {
     throw new Error("Nominal terbayar harus berupa angka valid.");
   }
 
@@ -107,6 +109,8 @@ async function payloadFromRequest(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (user.mustChangePassword) return NextResponse.json({ error: "Password change required" }, { status: 403 });
     const payload = await payloadFromRequest(request);
     if ("paymentDate" in payload && user?.role !== "superadmin") {
       return NextResponse.json(
@@ -123,6 +127,9 @@ export async function PATCH(request: Request) {
     const db = await getDb();
     const [invoice] = await db
       .select({
+        id: invoiceDocuments.id,
+        invoiceDate: invoiceDocuments.invoiceDate,
+        paidAmount: invoiceDocuments.paidAmount,
         sphStatus: sphDocuments.status,
         paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
         processedAt: invoiceDocuments.processedAt,
@@ -140,7 +147,7 @@ export async function PATCH(request: Request) {
 
     const updates: Partial<typeof invoiceDocuments.$inferInsert> = {};
 
-    if ("paidAmount" in payload) {
+    if ("paidAmount" in payload || "paymentEventId" in payload) {
       if (user?.username.toLowerCase() !== "superadmin") {
         return NextResponse.json(
           { error: "Hanya user superadmin yang dapat mengubah terbayar invoice." },
@@ -148,13 +155,12 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const paidAmount = parseAmount(payload.paidAmount);
-      updates.paidAmount = paidAmount;
-      updates.status = paymentStatus(invoice.totalAmount, paidAmount, invoice.status);
-      updates.processedAt =
-        updates.status === "done"
-          ? invoice.processedAt ?? new Date().toISOString()
-          : null;
+      if ("paidAmount" in payload) {
+        const paidAmount = parseAmount(payload.paidAmount);
+        updates.paidAmount = paidAmount;
+        updates.status = paymentStatus(invoice.totalAmount, paidAmount, invoice.status);
+        updates.processedAt = updates.status === "done" ? invoice.processedAt ?? new Date().toISOString() : null;
+      }
     }
 
     if ("paymentDate" in payload) {
@@ -204,26 +210,15 @@ export async function PATCH(request: Request) {
       ];
     }
 
-    if (Object.keys(updates).length > 0) {
-      await db.update(invoiceDocuments).set(updates).where(eq(invoiceDocuments.id, id));
-      if (user) {
-        await recordActivityLog({
-          action: "invoice_updated",
-          actor: user,
-          details: {
-            invoiceId: id,
-            paidAmount: updates.paidAmount,
-            previousPaymentDate: "paymentDate" in payload ? invoice.processedAt : undefined,
-            paymentDate: updates.processedAt,
-            paymentProofFilesAdded: payload.paymentProofFiles
-              ? (payload.paymentProofFiles as InvoiceStoredFile[]).length
-              : 0,
-            status: updates.status,
-            ttdMateraiUpdated: Boolean(payload.ttdMateraiFile),
-            signedTtbUpdated: Boolean(payload.signedTtbFile),
-          },
-        });
-      }
+    let saved: Partial<typeof invoiceDocuments.$inferInsert> & { paymentEvent?: { paymentId: string; amount?: number; paymentDate?: string } } = updates;
+    if (Object.keys(updates).length > 0 || "paymentEventId" in payload) {
+      saved = await persistInvoiceChange(db, invoice, updates, payload, {
+        invoiceId: id,
+        previousPaymentDate: "paymentDate" in payload ? invoice.processedAt : undefined,
+        paymentProofFilesAdded: payload.paymentProofFiles ? (payload.paymentProofFiles as InvoiceStoredFile[]).length : 0,
+        ttdMateraiUpdated: Boolean(payload.ttdMateraiFile),
+        signedTtbUpdated: Boolean(payload.signedTtbFile),
+      }, { id: user.id, username: user.username, ipAddress: request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown" });
     }
 
     revalidatePath("/dashboard");
@@ -232,7 +227,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({
       data: {
         id,
-        ...updates,
+        ...saved,
         ttbSignedFileBase64: undefined,
         ttdMateraiFileBase64: undefined,
         paymentProofFilesJson: undefined,
@@ -242,6 +237,9 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof InvoiceChangeConflict) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof InvalidPaymentChange) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error instanceof Error && ("query" in error || error.name === "LibsqlError")) return NextResponse.json({ error: "Gagal menyimpan invoice. Muat ulang dan periksa hasil sebelum mencoba kembali." }, { status: 500 });
     const message = error instanceof Error ? error.message : "Gagal mengubah invoice.";
 
     return NextResponse.json({ error: message }, { status: 400 });

@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../db";
 import { invoiceDocuments as inv, invoiceItems, sphDocuments as sph, supplierNotes as note, supplierNoteItems, suppliers } from "../../db/schema";
+import { invoiceMonthlyReport } from "../invoice/payment-history";
+import { readInvoicePaymentAudits } from "../invoice/payment-history-storage";
 
 export type DocumentType = "invoices" | "supplier-notes";
 const paymentStatuses = ["BELUM BAYAR", "DP", "LUNAS", "CANCELLED"];
@@ -14,7 +16,7 @@ export function validDate(value: string) {
 }
 
 export function parseBudgetingQuery(params: URLSearchParams, now = new Date()) {
-  const allowed = ["page", "pageSize", "dateFrom", "dateTo", "dueFrom", "dueTo", "asOf", "paymentStatus", "dueStatus", "customerId", "supplierId"];
+  const allowed = ["page", "pageSize", "dateFrom", "dateTo", "dueFrom", "dueTo", "asOf", "paymentStatus", "dueStatus", "customerId", "supplierId", "reportMonth"];
   for (const key of params.keys()) {
     if (!allowed.includes(key) || params.getAll(key).length !== 1) throw new InvalidBudgetingQuery(`Parameter tidak valid: ${key}`);
   }
@@ -38,6 +40,9 @@ export function parseBudgetingQuery(params: URLSearchParams, now = new Date()) {
   for (const key of ["customerId", "supplierId"]) {
     if (params.has(key) && (!params.get(key) || params.get(key)!.length > 256)) throw new InvalidBudgetingQuery(`${key} tidak valid.`);
   }
+  const reportMonth = params.get("reportMonth");
+  if (reportMonth !== null && (!/^\d{4}-(0[1-9]|1[0-2])$/.test(reportMonth) || Number(reportMonth.slice(0, 4)) < 1900 || Number(reportMonth.slice(0, 4)) > 9998)) throw new InvalidBudgetingQuery("reportMonth harus YYYY-MM (tahun 1900–9998).");
+  if (reportMonth && (params.has("paymentStatus") || params.has("dueStatus"))) throw new InvalidBudgetingQuery("Laporan bulanan tidak menerima filter status pembayaran saat ini. Gunakan monthlyReport.inclusionStatus.");
   return {
     page: integer("page", 1, 1_000_000), pageSize: integer("pageSize", 100, 200),
     asOf: params.get("asOf") ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(now),
@@ -45,6 +50,7 @@ export function parseBudgetingQuery(params: URLSearchParams, now = new Date()) {
     dueFrom: params.get("dueFrom"), dueTo: params.get("dueTo"),
     paymentStatus: params.get("paymentStatus"), dueStatus: params.get("dueStatus"),
     customerId: params.get("customerId"), supplierId: params.get("supplierId"),
+    reportMonth,
   };
 }
 
@@ -58,6 +64,7 @@ export function agingFields(dueDate: string | null, remainingPayment: number, pa
 // Dependency injection keeps verification on an isolated fixture database.
 export async function readBudgetingDocuments(db: Awaited<ReturnType<typeof getDb>>, type: DocumentType, query: ReturnType<typeof parseBudgetingQuery>, id?: string) {
   if (type === "invoices" && query.supplierId || type === "supplier-notes" && query.customerId) throw new InvalidBudgetingQuery("Filter identitas tidak sesuai jenis dokumen.");
+  if (type !== "invoices" && query.reportMonth) throw new InvalidBudgetingQuery("reportMonth hanya tersedia untuk invoice customer.");
   const invoiceDue = sql<string | null>`date(coalesce(${inv.paymentDueDate}, ${sph.paymentDueDate}, date(${inv.invoiceDate}, '+' || case when instr(upper(${inv.paymentTerm}), 'TOP') > 0 then cast(trim(substr(${inv.paymentTerm}, instr(upper(${inv.paymentTerm}), 'TOP') + 3)) as integer) else 0 end || ' days')))`;
   const paymentStatus = type === "invoices"
     ? sql<string>`case when ${inv.status} = 'cancelled' then 'CANCELLED' when ${inv.status} = 'done' or (${inv.totalAmount} > 0 and ${inv.paidAmount} >= ${inv.totalAmount}) then 'LUNAS' when ${inv.paidAmount} > 0 then 'DP' else 'BELUM BAYAR' end`
@@ -110,6 +117,19 @@ export async function readBudgetingDocuments(db: Awaited<ReturnType<typeof getDb
     grouped.push(item);
     byDocument.set(item.documentId, grouped);
   }
-  const data = rows.map(row => ({ ...row, currency: "IDR", ...agingFields(row.dueDate, row.remainingPayment, row.paymentStatus, query.asOf), items: byDocument.get(row.id) ?? [] }));
+  const audits = type === "invoices" && query.reportMonth ? await readInvoicePaymentAudits(db, ids) : [];
+  const byInvoice = new Map<string, typeof audits>();
+  for (const audit of audits) {
+    const invoiceId = String(audit.detailsJson.invoiceId);
+    const grouped = byInvoice.get(invoiceId) ?? [];
+    grouped.push(audit);
+    byInvoice.set(invoiceId, grouped);
+  }
+  const evaluatedAt = new Date();
+  const data = rows.map(row => ({ ...row, currency: "IDR", ...agingFields(row.dueDate, row.remainingPayment, row.paymentStatus, query.asOf), items: byDocument.get(row.id) ?? [],
+    ...(type === "invoices" && query.reportMonth && "status" in row && "processedAt" in row ? {
+      monthlyReport: invoiceMonthlyReport({ id: row.id, invoiceDate: row.documentDate, totalAmount: row.totalAmount, paidAmount: row.paidAmount, status: row.status, processedAt: row.processedAt }, byInvoice.get(row.id) ?? [], query.reportMonth, evaluatedAt),
+    } : {}),
+  }));
   return { data, pagination: { page: query.page, pageSize: query.pageSize, total, totalPages: Math.ceil(total / query.pageSize), hasNextPage: query.page * query.pageSize < total }, asOf: query.asOf, timeZone: "Asia/Jakarta" };
 }

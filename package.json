@@ -19,6 +19,7 @@
     "db:sync-dev": "node scripts/sync-dev-db.mjs",
     "test:supplier-api-auth": "node --test tests/supplier-notes-api-auth.test.mjs tests/supplier-notes-api-client.test.mjs",
     "test:budgeting-api": "node --experimental-test-module-mocks --import ./tests/manual-note-loader.mjs --test tests/budgeting-api.test.mjs",
+    "test:invoice-payment-history": "node --experimental-test-module-mocks --import ./tests/manual-note-loader.mjs --test tests/invoice-payment-history.test.mjs tests/invoice-payment-date-api.test.mjs tests/invoice-payment-date.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test:sph-workflow": "node --import ./tests/manual-note-loader.mjs --test tests/sph-workflow.test.mjs tests/sph-migration.test.mjs",

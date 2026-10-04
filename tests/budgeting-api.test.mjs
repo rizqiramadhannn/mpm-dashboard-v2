@@ -85,7 +85,7 @@ test("real SQL lists and details: boundaries, items, sums, pagination, private p
   const previousExpiry = process.env.BUDGETING_API_TOKEN_EXPIRES_AT;
   try {
     const dialect = new SQLiteSyncDialect();
-    for (const table of [schema.sphDocuments, schema.invoiceDocuments, schema.invoiceItems, schema.suppliers, schema.supplierNotes, schema.supplierNoteItems]) {
+    for (const table of [schema.sphDocuments, schema.invoiceDocuments, schema.invoiceItems, schema.suppliers, schema.supplierNotes, schema.supplierNoteItems, schema.appAdminAuditLogs]) {
       const config = getTableConfig(table);
       const columns = config.columns.map(c => {
         let value = `"${c.name}" ${c.getSQLType()}${c.primary ? " PRIMARY KEY" : ""}${c.notNull ? " NOT NULL" : ""}`;
@@ -115,7 +115,11 @@ test("real SQL lists and details: boundaries, items, sums, pagination, private p
       { id: "n3", supplierId: "sup1", noteNo: "N3", noteDate: "2026-10-01", amount: 100, paymentStatus: "CANCELLED", paymentDeadline: "2026-10-01" },
     ]);
     await database.insert(schema.supplierNoteItems).values({ id: "ni1", supplierNoteId: "n1", lineNo: 1, description: "Part", quantity: 0.5, unitPrice: 200, totalPrice: 100, dueDate: "2026-10-03" });
-    const snapshot = async () => Promise.all(["invoice_documents", "supplier_notes", "sph_documents"].map(table => client.execute(`SELECT * FROM ${table} ORDER BY id`)));
+    await database.insert(schema.appAdminAuditLogs).values([
+      { id: "audit-1", actorUsername: "PRIVATE ACTOR", ipAddress: "PRIVATE IP", action: "invoice_updated", createdAt: "2026-09-30T03:00:00Z", detailsJson: { invoiceId: "i1", paymentHistory: { version: 1, kind: "receipt", previousEventId: null, previousPaidAmount: 0, paidAmount: 20, paymentId: "payment-1", amount: 20, paymentDate: "2026-09-30" } } },
+      { id: "audit-2", actorUsername: "PRIVATE ACTOR", ipAddress: "PRIVATE IP", action: "invoice_updated", createdAt: "2026-10-03T03:00:00Z", detailsJson: { invoiceId: "i1", paymentHistory: { version: 1, kind: "receipt", previousEventId: "audit-1", previousPaidAmount: 20, paidAmount: 30, paymentId: "payment-2", amount: 10, paymentDate: "2026-10-03" } } },
+    ]);
+    const snapshot = async () => Promise.all(["invoice_documents", "supplier_notes", "sph_documents", "app_admin_audit_logs"].map(table => client.execute(`SELECT * FROM ${table} ORDER BY id`)));
     const before = await snapshot();
     const overdue = await readBudgetingDocuments(database, "invoices", query("dueStatus=overdue&paymentStatus=DP&customerId=c1"));
     assert.equal(overdue.data.length, 1);
@@ -150,6 +154,20 @@ test("real SQL lists and details: boundaries, items, sums, pagination, private p
     }
     assert.equal((await listNotes(req("supplier-notes?asOf=2026-10-04"))).status, 200);
     assert.equal((await listInvoices(req("invoices?pageSize=201"))).status, 400);
+    const monthlyResponse = await listInvoices(req("invoices?reportMonth=2026-10&pageSize=1&page=2"));
+    assert.equal(monthlyResponse.status, 200);
+    const monthlyBody = await monthlyResponse.json();
+    assert.equal(monthlyBody.data[0].id, "i1");
+    assert.deepEqual([monthlyBody.data[0].monthlyReport.targetAmount, monthlyBody.data[0].monthlyReport.openingRemaining,
+      monthlyBody.data[0].monthlyReport.receivedInPeriod, monthlyBody.data[0].monthlyReport.closingRemaining], [80, 0, 10, 70]);
+    assert.ok(!JSON.stringify(monthlyBody).includes("PRIVATE"));
+    assert.ok(!JSON.stringify(monthlyBody).includes("audit-1"));
+    const monthlyDetail = await detailInvoice(req("invoices/i1?reportMonth=2026-10"), { params: Promise.resolve({ id: "i1" }) });
+    assert.equal(monthlyDetail.status, 200);
+    assert.equal((await monthlyDetail.json()).data.monthlyReport.receivedInPeriod, 10);
+    assert.equal((await listInvoices(req("invoices?reportMonth=2026-10&paymentStatus=BELUM%20BAYAR"))).status, 400);
+    assert.equal((await listNotes(req("supplier-notes?reportMonth=2026-10"))).status, 400);
+    assert.equal((await listInvoices(req("invoices?reportMonth=2026-13"))).status, 400);
     assert.deepEqual(await snapshot(), before);
     database = undefined;
     const failed = await listInvoices(req("invoices"));

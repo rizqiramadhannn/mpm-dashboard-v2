@@ -9,7 +9,7 @@ export async function budgetingResponse(request: Request, type: DocumentType, id
   if (status !== 200) return Response.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status, headers });
   try {
     const params = new URL(request.url).searchParams;
-    if (id && [...params.keys()].some(key => key !== "asOf")) throw new InvalidBudgetingQuery("Detail hanya menerima asOf.");
+    if (id && [...params.keys()].some(key => key !== "asOf" && key !== "reportMonth")) throw new InvalidBudgetingQuery("Detail hanya menerima asOf dan reportMonth (invoice).");
     const query = parseBudgetingQuery(params);
     const result = await readBudgetingDocuments(await getDb(), type, query, id);
     if (id && !result.data.length) return Response.json({ error: "Dokumen tidak ditemukan." }, { status: 404, headers });

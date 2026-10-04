@@ -140,6 +140,12 @@ export function InvoiceLedgerTable({
   const [draftPaymentDate, setDraftPaymentDate] = useState("");
   const [savingPaymentDate, setSavingPaymentDate] = useState(false);
   const [paymentDateError, setPaymentDateError] = useState("");
+  const [paidAmountEdit, setPaidAmountEdit] = useState<{ row: LedgerRow; amount: number } | null>(null);
+  const [paymentEntryKind, setPaymentEntryKind] = useState("receipt");
+  const [receivedDate, setReceivedDate] = useState("");
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [savingPaidAmount, setSavingPaidAmount] = useState(false);
+  const [paidAmountError, setPaidAmountError] = useState("");
   const [editing, setEditing] = useState<{ rowId: string; field: EditableField } | null>(
     null
   );
@@ -282,7 +288,9 @@ export function InvoiceLedgerTable({
 
   async function updatePaidAmount(row: LedgerRow, amount: number) {
     const response = await fetch("/api/invoices", {
-      body: JSON.stringify({ id: row.invoiceId, paidAmount: amount }),
+      body: JSON.stringify({ id: row.invoiceId, paidAmount: amount, expectedPaidAmount: row.paidAmount,
+        paymentKind: paymentEntryKind, receivedDate: paymentEntryKind === "receipt" ? receivedDate : undefined,
+        correctionReason: paymentEntryKind === "correction" ? correctionReason : undefined }),
       headers: { "content-type": "application/json" },
       method: "PATCH",
     });
@@ -345,6 +353,18 @@ export function InvoiceLedgerTable({
     }
   }
 
+  async function savePaidAmount() {
+    if (!paidAmountEdit || savingPaidAmount) return;
+    setSavingPaidAmount(true);
+    setPaidAmountError("");
+    try {
+      await updatePaidAmount(paidAmountEdit.row, paidAmountEdit.amount);
+      setPaidAmountEdit(null);
+    } catch (error) {
+      setPaidAmountError(error instanceof Error ? error.message : "Gagal menyimpan pembayaran.");
+    } finally { setSavingPaidAmount(false); }
+  }
+
   function commitEdit() {
     if (!editing) {
       return;
@@ -364,17 +384,21 @@ export function InvoiceLedgerTable({
 
     const amount = parseAmount(draftValue);
 
-    const label = editing.field === "paidAmount" ? "Terbayar" : editing.field;
-
-    if (!window.confirm(`Simpan perubahan ${label} untuk ${row.invoiceNo}?`)) {
+    if (editing.field === "paidAmount") {
+      if (amount !== row.paidAmount) {
+        setPaidAmountEdit({ row, amount });
+        setPaymentEntryKind(amount > row.paidAmount ? "receipt" : "correction");
+        setReceivedDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()));
+        setCorrectionReason("");
+        setPaidAmountError("");
+      }
       closeEdit();
       return;
     }
 
-    if (editing.field === "paidAmount") {
-      void updatePaidAmount(row, amount).catch((error) => {
-        window.alert(error instanceof Error ? error.message : "Gagal mengubah terbayar.");
-      });
+    const label = editing.field;
+
+    if (!window.confirm(`Simpan perubahan ${label} untuk ${row.invoiceNo}?`)) {
       closeEdit();
       return;
     }
@@ -700,6 +724,36 @@ export function InvoiceLedgerTable({
         </tbody>
         </ConfigurableTable>
       </div>
+
+      {paidAmountEdit ? (
+        <ModalBackdrop onClose={() => { if (!savingPaidAmount) setPaidAmountEdit(null); }}>
+          <form aria-labelledby="invoice-receipt-title" aria-modal="true" className="download-confirmation-modal" role="dialog"
+            onSubmit={(event) => { event.preventDefault(); void savePaidAmount(); }}>
+            <h2 id="invoice-receipt-title">Catat perubahan terbayar</h2>
+            <p>{paidAmountEdit.row.invoiceNo} — {paidAmountEdit.row.customerName}</p>
+            <p>Terbayar {formatMoney(paidAmountEdit.row.paidAmount)} menjadi {formatMoney(paidAmountEdit.amount)}.</p>
+            <label htmlFor="invoice-payment-kind">Jenis perubahan</label>
+            <select id="invoice-payment-kind" value={paymentEntryKind} disabled={savingPaidAmount} onChange={(event) => setPaymentEntryKind(event.target.value)}>
+              {paidAmountEdit.amount > paidAmountEdit.row.paidAmount ? <option value="receipt">Penerimaan dana baru</option> : null}
+              <option value="correction">Koreksi saldo terbayar</option>
+            </select>
+            {paymentEntryKind === "receipt" ? <>
+              <p>Dana yang masuk: {formatMoney(paidAmountEdit.amount - paidAmountEdit.row.paidAmount)}.</p>
+              <label htmlFor="invoice-received-date">Tanggal dana diterima (WIB)</label>
+              <input id="invoice-received-date" type="date" required value={receivedDate} disabled={savingPaidAmount} onChange={(event) => setReceivedDate(event.target.value)} />
+            </> : <>
+              <p>Koreksi saldo tidak dicatat sebagai penerimaan dana. Laporan historis dapat memerlukan rekonsiliasi.</p>
+              <label htmlFor="invoice-correction-reason">Alasan koreksi</label>
+              <input id="invoice-correction-reason" required minLength={3} maxLength={500} value={correctionReason} disabled={savingPaidAmount} onChange={(event) => setCorrectionReason(event.target.value)} />
+            </>}
+            {paidAmountError ? <p role="alert">{paidAmountError}</p> : null}
+            <div className="download-confirmation-actions">
+              <button className="secondary-button" type="button" disabled={savingPaidAmount} onClick={() => setPaidAmountEdit(null)}>Batal</button>
+              <button className="primary-button" type="submit" disabled={savingPaidAmount}>{savingPaidAmount ? "Menyimpan..." : "Simpan pembayaran"}</button>
+            </div>
+          </form>
+        </ModalBackdrop>
+      ) : null}
 
       {paymentDateEdit ? (
         <ModalBackdrop onClose={() => { if (!savingPaymentDate) setPaymentDateEdit(null); }}>
