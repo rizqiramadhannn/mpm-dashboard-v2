@@ -121,6 +121,15 @@ test('broken/missing events and adjustments never appear as verified cash or bal
   assert.equal(corrected.knownReceivedInPeriod, 0);
 });
 
+test('unallocated reductions with later receipt-date amendments cannot fabricate negative historical paid balances', () => {
+  const a = receipt('a', null, 0, 100, '2026-10-01');
+  const b = { id: 'b', createdAt: '2026-11-10T03:00:00Z', detailsJson: { invoiceId: 'i1', paymentHistory: { version: 1, kind: 'unallocated_adjustment', previousEventId: 'a', previousPaidAmount: 100, paidAmount: 50 } } };
+  const c = { id: 'c', createdAt: '2026-12-21T03:00:00Z', detailsJson: { invoiceId: 'i1', paymentHistory: { version: 1, kind: 'receipt_correction', previousEventId: 'b', previousPaidAmount: 50, paidAmount: 50, paymentId: 'p-a', amount: 100, paymentDate: '2026-12-20' } } };
+  const result = report(invoice({ paidAmount: 50, status: 'pending', processedAt: null }), [a, b, c], '2026-11');
+  assert.equal(result.closingRemaining, null);
+  assert.equal(result.balanceComplete, false);
+});
+
 async function fixture(run) {
   const tempRoot = resolve(tmpdir());
   const directory = await mkdtemp(join(tempRoot, 'mpm-payment-history-'));

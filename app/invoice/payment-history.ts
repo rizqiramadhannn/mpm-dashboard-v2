@@ -120,7 +120,8 @@ export function invoiceMonthlyReport(invoice: PaymentSnapshot, logs: PaymentAudi
   const paidBefore = (cutoff: string): number | null => {
     if (!state.valid || state.unresolved.some(component => component.amount !== 0 && (!component.knownBy || cutoff <= component.knownBy))) return null;
     if (state.reasons.includes("legacy_payment_changes") && (!state.latestLegacyDate || cutoff <= state.latestLegacyDate)) return null;
-    return state.unresolved.reduce((sum, component) => sum + component.amount, 0) + state.payments.filter(payment => payment.paymentDate < cutoff).reduce((sum, payment) => sum + payment.amount, 0);
+    const paid = state.unresolved.reduce((sum, component) => sum + component.amount, 0) + state.payments.filter(payment => payment.paymentDate < cutoff).reduce((sum, payment) => sum + payment.amount, 0);
+    return Number.isSafeInteger(paid) && paid >= 0 ? paid : null;
   };
   const remainingBefore = (cutoff: string) => {
     if (invoice.invoiceDate >= cutoff) return 0;
