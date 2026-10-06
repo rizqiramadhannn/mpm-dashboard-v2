@@ -265,6 +265,27 @@ penanda yang jelas, dan pertahankan baris `review_required` untuk pemeriksaan.
 koreksi saldo yang tidak dialokasikan dapat berarti nilai ini juga perlu ditinjau.
 Sinkronisasi dilakukan manual; API ini tidak memasang trigger spreadsheet.
 
+### Biaya invoice
+
+List/detail invoice, termasuk `reportMonth`, juga mengembalikan angka IDR
+top-level `modalAmount`, `feeAmount`, `kodAmount`, `ongkirAmount`, `hppAmount`,
+dan `marginAmount`. Semua memakai fungsi yang sama dengan List Invoice:
+
+- `ongkirAmount`: jumlah biaya handling, udara, laut, darat, maxim, dan biaya
+  lain-lain, dihitung sekali per SPH/shipment (atau batchNo pada data legacy).
+  Bila biaya shipment berulang di beberapa item, gunakan total terbesar;
+  jumlahkan hasil dari shipment/batch yang berbeda. Pengiriman belum dibayar
+  tetap merupakan biaya HPP seperti pada dashboard.
+- `hppAmount = modalAmount + feeAmount + ongkirAmount + kodAmount`.
+- `marginAmount = totalAmount - hppAmount`, yaitu GP rupiah, bukan persentase;
+  nilai negatif diperbolehkan.
+
+Biaya ini adalah nilai dokumen/SPH saat ini. Parameter `reportMonth` tidak
+merekonstruksi biaya historis atau mengalokasikannya ke cicilan bulan tersebut.
+Pagination memakai seluruh item SPH untuk biaya, bukan hanya item invoice
+atau item pada halaman hasil. Satu SPH diperlakukan sama seperti List Invoice;
+ongkir tidak dibagi antar invoice jika beberapa invoice merujuk SPH yang sama.
+
 Contoh invoice Rp1.000.000: receipt Rp400.000 tanggal 30 September, receipt
 Rp600.000 tanggal 10 Oktober. Oktober memiliki target/saldo awal Rp600.000,
 dana masuk Rp600.000, saldo akhir 0, inclusionStatus include. November memiliki

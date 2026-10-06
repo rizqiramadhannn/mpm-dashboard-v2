@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../db";
-import { invoiceDocuments as inv, invoiceItems, sphDocuments as sph, supplierNotes as note, supplierNoteItems, suppliers } from "../../db/schema";
+import { invoiceDocuments as inv, invoiceItems, sphDocuments as sph, sphItems, shipmentJourneys, supplierNotes as note, supplierNoteItems, suppliers } from "../../db/schema";
+import { invoiceCosts, invoiceShippingBySph } from "../invoice/costs";
 import { invoiceMonthlyReport } from "../invoice/payment-history";
 import { readInvoicePaymentAudits } from "../invoice/payment-history-storage";
 
@@ -78,6 +79,7 @@ export async function readBudgetingDocuments(db: Awaited<ReturnType<typeof getDb
     customerId: sph.customerId, customerCode: sph.customerCode, customerName: inv.customerName,
     paymentTerm: inv.paymentTerm, paymentDueDate: inv.paymentDueDate, dueDate: invoiceDue.as("due_date"),
     totalAmount: inv.totalAmount, paidAmount: inv.paidAmount, remainingPayment: remaining.as("remaining_payment"),
+    modalAmount: inv.modalAmount, feeAmount: inv.feeAmount, kodAmount: inv.kodAmount,
     status: inv.status, paymentStatus: paymentStatus.as("payment_status"), processedAt: inv.processedAt,
     paymentDate: sql<string | null>`substr(${inv.processedAt}, 1, 10)`.as("payment_date"),
     createdAt: inv.createdAt, updatedAt: inv.updatedAt,
@@ -108,6 +110,16 @@ export async function readBudgetingDocuments(db: Awaited<ReturnType<typeof getDb
   const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(source).where(where);
   const rows = await db.select().from(source).where(where).orderBy(desc(source.documentDate), asc(source.id)).limit(id ? 1 : query.pageSize).offset(id ? 0 : (query.page - 1) * query.pageSize);
   const ids = rows.map(row => row.id);
+  const sphIds = type === "invoices" ? [...new Set(rows.flatMap(row => "sphId" in row ? [row.sphId] : []))] : [];
+  const costItems = sphIds.length ? await db.select({ id: sphItems.id, sphId: sphItems.sphId }).from(sphItems).where(inArray(sphItems.sphId, sphIds)) : [];
+  const costItemIds = costItems.map(item => item.id);
+  const costJourneys = costItemIds.length ? await db.select({
+    sphItemId: shipmentJourneys.sphItemId, shipmentId: shipmentJourneys.shipmentId, batchNo: shipmentJourneys.batchNo,
+    handlingCost: shipmentJourneys.handlingCost, airShippingCost: shipmentJourneys.airShippingCost,
+    seaShippingCost: shipmentJourneys.seaShippingCost, landShippingCost: shipmentJourneys.landShippingCost,
+    maximShippingCost: shipmentJourneys.maximShippingCost, otherShippingCost: shipmentJourneys.otherShippingCost,
+  }).from(shipmentJourneys).where(inArray(shipmentJourneys.sphItemId, costItemIds)) : [];
+  const shippingBySph = invoiceShippingBySph(costItems, costJourneys);
   const items = !ids.length ? [] : type === "invoices"
     ? await db.select({ id: invoiceItems.id, documentId: invoiceItems.invoiceId, sphItemId: invoiceItems.sphItemId, lineNo: invoiceItems.lineNo, partNumber: invoiceItems.partNumber, partName: invoiceItems.partName, quantity: invoiceItems.quantity, uom: invoiceItems.uom, unitPrice: invoiceItems.unitPrice, totalPrice: invoiceItems.totalPrice }).from(invoiceItems).where(inArray(invoiceItems.invoiceId, ids)).orderBy(asc(invoiceItems.lineNo))
     : await db.select({ id: supplierNoteItems.id, documentId: supplierNoteItems.supplierNoteId, lineNo: supplierNoteItems.lineNo, partNumber: supplierNoteItems.partNumber, description: supplierNoteItems.description, quantity: supplierNoteItems.quantity, uom: supplierNoteItems.uom, unitPrice: supplierNoteItems.unitPrice, totalPrice: supplierNoteItems.totalPrice, dueDate: supplierNoteItems.dueDate, status: supplierNoteItems.status, shortCode: supplierNoteItems.shortCode, flag: supplierNoteItems.flag }).from(supplierNoteItems).where(inArray(supplierNoteItems.supplierNoteId, ids)).orderBy(asc(supplierNoteItems.lineNo));
@@ -127,6 +139,7 @@ export async function readBudgetingDocuments(db: Awaited<ReturnType<typeof getDb
   }
   const evaluatedAt = new Date();
   const data = rows.map(row => ({ ...row, currency: "IDR", ...agingFields(row.dueDate, row.remainingPayment, row.paymentStatus, query.asOf), items: byDocument.get(row.id) ?? [],
+    ...(type === "invoices" && "modalAmount" in row && "sphId" in row ? invoiceCosts(row, shippingBySph.get(row.sphId) ?? 0) : {}),
     ...(type === "invoices" && query.reportMonth && "status" in row && "processedAt" in row ? {
       monthlyReport: invoiceMonthlyReport({ id: row.id, invoiceDate: row.documentDate, totalAmount: row.totalAmount, paidAmount: row.paidAmount, status: row.status, processedAt: row.processedAt }, byInvoice.get(row.id) ?? [], query.reportMonth, evaluatedAt),
     } : {}),

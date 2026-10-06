@@ -15,7 +15,7 @@ import {
   sphItems,
 } from "../../db/schema";
 import { InvoiceLedgerTable, type LedgerRow } from "./InvoiceLedgerTable";
-import { totalShippingCosts } from "../pengiriman/shipping-costs";
+import { invoiceCosts, invoiceShippingBySph } from "./costs";
 
 export const dynamic = "force-dynamic";
 
@@ -396,7 +396,6 @@ export default async function InvoicePage({
           .from(sphItems)
           .where(inArray(sphItems.sphId, sphIds))
       : [];
-  const sphIdByItem = new Map(itemRows.map((item) => [item.id, item.sphId]));
   const itemsBySph = new Map<string, LedgerRow["items"]>();
   for (const { sphId, ...item } of itemRows) {
     const items = itemsBySph.get(sphId) ?? [];
@@ -422,25 +421,7 @@ export default async function InvoicePage({
           .from(shipmentJourneys)
           .where(inArray(shipmentJourneys.sphItemId, itemIds))
       : [];
-  const ongkirBySph = new Map<string, number>();
-  const ongkirBatchCostBySph = new Map<string, number>();
-
-  for (const journey of journeyRows) {
-    const sphId = sphIdByItem.get(journey.sphItemId);
-
-    if (sphId) {
-      const batchKey = `${sphId}:${journey.shipmentId ?? `batch-${journey.batchNo}`}`;
-      ongkirBatchCostBySph.set(
-        batchKey,
-        Math.max(ongkirBatchCostBySph.get(batchKey) ?? 0, totalShippingCosts(journey))
-      );
-    }
-  }
-
-  for (const [batchKey, shippingCost] of ongkirBatchCostBySph) {
-    const sphId = batchKey.split(":")[0];
-    ongkirBySph.set(sphId, (ongkirBySph.get(sphId) ?? 0) + shippingCost);
-  }
+  const ongkirBySph = invoiceShippingBySph(itemRows, journeyRows);
 
   const ledgerRows: LedgerRow[] = invoiceEligibleSphRows.map((sph) => {
     const invoice = invoiceBySph.get(sph.id);
@@ -456,8 +437,7 @@ export default async function InvoicePage({
     const kodAmount = invoice?.kodAmount ?? 0;
     const paidAmount = invoice?.paidAmount ?? 0;
     const ongkirAmount = ongkirBySph.get(sph.id) ?? 0;
-    const hppAmount = modalAmount + feeAmount + ongkirAmount + kodAmount;
-    const gpAmount = totalAmount - hppAmount;
+    const { hppAmount, marginAmount: gpAmount } = invoiceCosts({ totalAmount, modalAmount, feeAmount, kodAmount }, ongkirAmount);
     const status =
       paidAmount >= totalAmount && totalAmount > 0
         ? "LUNAS"
