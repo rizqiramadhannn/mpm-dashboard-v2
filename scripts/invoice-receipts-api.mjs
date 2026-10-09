@@ -1,0 +1,15 @@
+import {readFile} from 'node:fs/promises';
+import {basename} from 'node:path';
+import {apiRequest} from './supplier-notes-api.mjs';
+const [payloadPath,proofPath,confirmation]=process.argv.slice(2);
+if(!payloadPath||!proofPath||confirmation!=='--confirmed')throw new Error('Usage: invoice-receipts-api.mjs payload.json proof.pdf --confirmed');
+const payload=JSON.parse(await readFile(payloadPath,'utf8'));
+if(!/^id_[a-z0-9]+$/i.test(payload.id??''))throw new Error('Invalid invoice ID');
+const path='/api/invoice-documents/'+encodeURIComponent(payload.id);
+const base=process.env.INVOICE_DOCUMENTS_API_BASE_URL||'https://mpm-dashboard-v2.vercel.app';
+const token=process.env.INVOICE_DOCUMENTS_API_TOKEN;
+const {id,...guard}=payload;
+const form=new FormData();form.set('payload',JSON.stringify(guard));
+form.set('paymentProofFile',new Blob([await readFile(proofPath)]),basename(proofPath));
+const result=await (await apiRequest(base,token,path+'/settle',{method:'POST',body:form})).json();
+console.log(JSON.stringify(result.data));

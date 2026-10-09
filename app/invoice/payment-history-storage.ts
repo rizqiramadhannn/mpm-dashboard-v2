@@ -20,7 +20,7 @@ type ChangeInput = { paymentKind?: unknown; receivedDate?: unknown; expectedPaid
 
 export async function persistInvoiceChange(
   db: Db, before: Snapshot, updates: Partial<typeof invoiceDocuments.$inferInsert>, payload: ChangeInput,
-  details: Record<string, unknown>, actor: { id: string; username: string; ipAddress: string }, now = new Date(),
+  details: Record<string, unknown>, actor: { id: string | null; username: string; ipAddress: string }, now = new Date(),
 ) {
   return db.transaction(async tx => {
     const [current] = await tx.select({ id: invoiceDocuments.id, invoiceDate: invoiceDocuments.invoiceDate,

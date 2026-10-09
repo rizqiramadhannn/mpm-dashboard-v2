@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isSupplierNotesApiScope, validateSupplierNotesApiToken } from "./app/supplier-notes-api-auth";
 import { budgetingApiAuthorization, isBudgetingApiPath } from "./app/budgeting-api-auth";
+import { invoiceDocumentsApiAuthorization, isInvoiceDocumentsApiPath } from "./app/invoice-documents-api-auth";
 
 const SESSION_COOKIE = "mpm_session";
 const LOCAL_AUTH_SECRET = "mpm-dashboard-local-auth-secret-change-me";
@@ -14,6 +15,11 @@ type SessionPayload = {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (isInvoiceDocumentsApiPath(pathname)) {
+    const status = await invoiceDocumentsApiAuthorization(request);
+    return status === 200 ? NextResponse.next() : NextResponse.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status });
+  }
 
   if (isBudgetingApiPath(pathname)) {
     const status = await budgetingApiAuthorization(request);

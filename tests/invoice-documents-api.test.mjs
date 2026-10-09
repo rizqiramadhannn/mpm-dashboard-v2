@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { test, mock } from 'node:test';
+import { createHash } from 'node:crypto';
+import { registerHooks } from 'node:module';
+import { PDFDocument } from 'pdf-lib';
+import { invoiceDocumentsApiAuthorization, isInvoiceDocumentsApiScope } from '../app/invoice-documents-api-auth.ts';
+registerHooks({resolve(s,c,n){return n(s==='next/server'?'next/server.js':s,c);}});
+const token='a'.repeat(43);
+process.env.INVOICE_DOCUMENTS_API_TOKEN_SHA256=createHash('sha256').update(token).digest('hex');
+process.env.INVOICE_DOCUMENTS_API_TOKEN_EXPIRES_AT='2099-01-01T00:00:00Z';
+let changed, audits=0;
+const row={id:'id_1',invoiceNo:'INV123',sphNo:'SPH123',sphStatus:'menunggu_pengiriman',ttbSignedFileSha256:'',paidAmount:0,totalAmount:100,status:'pending'};
+const builder={from(){return this},innerJoin(){return this},where(){return this},limit:async()=>[row]};
+const db={select:()=>builder,transaction:async f=>f({update:()=>({set:u=>{changed=u;return {where:()=>({returning:async()=>[{id:row.id}]})}}}),insert:()=>({values:async()=>{audits++}})})};
+mock.module('../db/index.ts',{namedExports:{getDb:async()=>db}});
+const {PATCH}=await import('../app/api/invoice-documents/[id]/route.ts');
+const request=(body,auth=`Bearer ${token}`)=>new Request('https://example.test/api/invoice-documents/id_1',{method:'PATCH',headers:{Authorization:auth},body});
+test('token only permits metadata, TTB upload and invoice download; expires closed',async()=>{
+  for(const [p,m] of [['/api/invoice-documents/id_1','GET'],['/api/invoice-documents/id_1','PATCH'],['/api/invoice-documents/id_1/download','GET'],['/api/invoice-documents/id_1/settle','POST']]) assert.equal(isInvoiceDocumentsApiScope(p,m),true);
+  for(const [p,m] of [['/api/invoices','PATCH'],['/api/invoice-documents/id_1','DELETE'],['/api/invoice-documents/id_1/download','PATCH'],['/api/invoice-documents/id_1/other','GET']])assert.equal(isInvoiceDocumentsApiScope(p,m),false);
+  assert.equal(await invoiceDocumentsApiAuthorization(request(new FormData(),'Bearer '+ 'b'.repeat(43))),401);
+});
+test('TTB update checks identity/guard, rejects payment fields, and writes only document columns with audit',async()=>{
+  const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();
+  const form=(no='INV123',guard='')=>{const f=new FormData();f.set('invoiceNo',no);f.set('expectedTtbSha256',guard);f.set('signedTtbFile',new Blob([bytes],{type:'application/pdf'}),'signed.pdf');return f;};
+  const ctx={params:Promise.resolve({id:'id_1'})};
+  assert.equal((await PATCH(request(form('wrong')),ctx)).status,409);
+  assert.equal((await PATCH(request(form('INV123','stale')),ctx)).status,409);
+  const extra=form();extra.set('paidAmount','100');assert.equal((await PATCH(request(extra),ctx)).status,400);
+  const result=await PATCH(request(form()),ctx);assert.equal(result.status,200);
+  assert.equal(changed.ttbSignedFileName,'signed.pdf');assert.equal('paidAmount' in changed,false);assert.equal('status' in changed,false);assert.equal(audits,1);
+});
