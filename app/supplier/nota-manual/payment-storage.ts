@@ -25,16 +25,43 @@ export async function settleManualNote(db: Awaited<ReturnType<typeof getDb>>, id
 export async function reopenManualNoteAsUnpaid(db: Awaited<ReturnType<typeof getDb>>, id: string, value: unknown, ipAddress: string) {
   if (!value || typeof value !== "object" || !("expectedAmount" in value) || !("expectedPaidAmount" in value) || !("expectedPaymentStatus" in value)) throw new ManualNoteError("Kondisi review wajib diberikan.");
   const { expectedAmount, expectedPaidAmount, expectedPaymentStatus } = value;
-  if (typeof expectedAmount !== "number" || !Number.isSafeInteger(expectedAmount) || expectedAmount <= 0 || typeof expectedPaidAmount !== "number" || !Number.isSafeInteger(expectedPaidAmount) || expectedPaidAmount < 0 || expectedPaidAmount > expectedAmount || expectedPaymentStatus !== "CANCELLED") throw new ManualNoteError("Kondisi review tidak valid.");
+  const clearPaymentProof = "clearPaymentProof" in value ? value.clearPaymentProof : false;
+  if (typeof expectedAmount !== "number" || !Number.isSafeInteger(expectedAmount) || expectedAmount <= 0 || typeof expectedPaidAmount !== "number" || !Number.isSafeInteger(expectedPaidAmount) || expectedPaidAmount < 0 || expectedPaidAmount > expectedAmount || (expectedPaymentStatus !== "CANCELLED" && expectedPaymentStatus !== "LUNAS") || typeof clearPaymentProof !== "boolean") throw new ManualNoteError("Kondisi review tidak valid.");
   return db.transaction(async tx => {
-    const [note] = await tx.select({ id: supplierNotes.id, noteSource: supplierNotes.noteSource, amount: supplierNotes.amount, paidAmount: supplierNotes.paidAmount, paymentStatus: supplierNotes.paymentStatus, paymentDate: supplierNotes.paymentDate }).from(supplierNotes).where(eq(supplierNotes.id, id)).limit(1);
+    const [note] = await tx.select({
+      id: supplierNotes.id,
+      noteSource: supplierNotes.noteSource,
+      amount: supplierNotes.amount,
+      paidAmount: supplierNotes.paidAmount,
+      paymentStatus: supplierNotes.paymentStatus,
+      paymentDate: supplierNotes.paymentDate,
+      paymentProofFileName: supplierNotes.paymentProofFileName,
+      paymentProofFileMimeType: supplierNotes.paymentProofFileMimeType,
+      paymentProofFileSize: supplierNotes.paymentProofFileSize,
+      paymentProofFileBase64: supplierNotes.paymentProofFileBase64,
+      paymentProofFileUrl: supplierNotes.paymentProofFileUrl,
+      paymentProofFileSha256: supplierNotes.paymentProofFileSha256,
+      paymentProofFilesJson: supplierNotes.paymentProofFilesJson,
+    }).from(supplierNotes).where(eq(supplierNotes.id, id)).limit(1);
     if (!note || note.noteSource !== "manual") throw new ManualNoteError("Nota manual tidak ditemukan.", 404);
     if (note.amount !== expectedAmount) throw new ManualNoteError("Total berubah sejak review.", 409);
-    if (note.paymentStatus === "BELUM BAYAR" && note.paidAmount === 0 && note.paymentDate === null) return { id, paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, reused: true };
+    const paymentProofCount = Array.isArray(note.paymentProofFilesJson) && note.paymentProofFilesJson.length > 0
+      ? note.paymentProofFilesJson.length
+      : note.paymentProofFileName || note.paymentProofFileBase64 || note.paymentProofFileUrl ? 1 : 0;
+    if (note.paymentStatus === "BELUM BAYAR" && note.paidAmount === 0 && note.paymentDate === null && (!clearPaymentProof || paymentProofCount === 0)) return { id, paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, paymentProofCount, reused: true };
     if (note.paidAmount !== expectedPaidAmount || note.paymentStatus !== expectedPaymentStatus) throw new ManualNoteError("Status pembayaran berubah sejak review.", 409);
-    const [updated] = await tx.update(supplierNotes).set({ paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, updatedAt: new Date().toISOString() }).where(and(eq(supplierNotes.id, id), eq(supplierNotes.amount, expectedAmount), eq(supplierNotes.paidAmount, expectedPaidAmount), eq(supplierNotes.paymentStatus, expectedPaymentStatus))).returning({ id: supplierNotes.id });
+    const proofUpdates = clearPaymentProof ? {
+      paymentProofFileName: "",
+      paymentProofFileMimeType: "",
+      paymentProofFileSize: 0,
+      paymentProofFileBase64: "",
+      paymentProofFileUrl: "",
+      paymentProofFileSha256: "",
+      paymentProofFilesJson: [],
+    } : {};
+    const [updated] = await tx.update(supplierNotes).set({ paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, ...proofUpdates, updatedAt: new Date().toISOString() }).where(and(eq(supplierNotes.id, id), eq(supplierNotes.amount, expectedAmount), eq(supplierNotes.paidAmount, expectedPaidAmount), eq(supplierNotes.paymentStatus, expectedPaymentStatus))).returning({ id: supplierNotes.id });
     if (!updated) throw new ManualNoteError("Nota berubah sejak review.", 409);
-    await tx.insert(appAdminAuditLogs).values({ actorUserId: null, actorUsername: "supplier-notes-api", action: "supplier_manual_note_reopened_unpaid", ipAddress, detailsJson: { id, amount: note.amount, previousPaidAmount: note.paidAmount, previousPaymentStatus: note.paymentStatus, previousPaymentDate: note.paymentDate, paidAmount: 0, paymentStatus: "BELUM BAYAR" } });
-    return { id, paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, reused: false };
+    await tx.insert(appAdminAuditLogs).values({ actorUserId: null, actorUsername: "supplier-notes-api", action: "supplier_manual_note_reopened_unpaid", ipAddress, detailsJson: { id, amount: note.amount, previousPaidAmount: note.paidAmount, previousPaymentStatus: note.paymentStatus, previousPaymentDate: note.paymentDate, previousPaymentProofCount: paymentProofCount, paymentProofsCleared: clearPaymentProof, paidAmount: 0, paymentStatus: "BELUM BAYAR" } });
+    return { id, paidAmount: 0, remainingPayment: note.amount, paymentStatus: "BELUM BAYAR", paymentDate: null, paymentProofCount: clearPaymentProof ? 0 : paymentProofCount, reused: false };
   });
 }

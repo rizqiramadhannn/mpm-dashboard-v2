@@ -113,6 +113,21 @@ async function main() {
     console.log(JSON.stringify({ status: "settled-unverified", id: data.id, paidAmount: data.paidAmount, paymentDate: data.paymentDate, paymentProofCount: data.paymentProofCount, reused: data.reused }));
     return;
   }
+  if (command === "reopen") {
+    if (!payloadPath || invoicePath !== "--confirmed") {
+      throw new Error("Usage: reopen payload.json --confirmed (only after reconciliation).");
+    }
+    const payload = JSON.parse(await readFile(payloadPath, "utf8"));
+    if (!payload.id || !Number.isSafeInteger(payload.expectedAmount) || !Number.isSafeInteger(payload.expectedPaidAmount) || !["CANCELLED", "LUNAS"].includes(payload.expectedPaymentStatus) || ("clearPaymentProof" in payload && typeof payload.clearPaymentProof !== "boolean")) {
+      throw new Error("Incomplete reviewed reopen payload.");
+    }
+    const { id, ...reviewed } = payload;
+    const path = `/api/supplier-notes/manual/${encodeURIComponent(id)}/reopen`;
+    const response = await apiRequest(base, token, path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reviewed) });
+    const { data } = await response.json();
+    console.log(JSON.stringify({ status: "reopened-unverified", id: data.id, paidAmount: data.paidAmount, paymentDate: data.paymentDate, paymentProofCount: data.paymentProofCount, reused: data.reused }));
+    return;
+  }
   if (command === "list") {
     const response = await apiRequest(base, token, "/api/supplier-notes");
     const { data } = await response.json();
@@ -120,7 +135,7 @@ async function main() {
     return;
   }
   if (command !== "upload" || !payloadPath || !invoicePath || confirmation !== "--confirmed") {
-    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR correct payload.json --confirmed OR settle payload.json [payment-proof.pdf ...] --confirmed OR upload payload.json invoice.pdf --confirmed.");
+    throw new Error("Usage: node scripts/supplier-notes-api.mjs masters|list OR correct payload.json --confirmed OR settle payload.json [payment-proof.pdf ...] --confirmed OR reopen payload.json --confirmed OR upload payload.json invoice.pdf --confirmed.");
   }
   const payload = JSON.parse(await readFile(payloadPath, "utf8"));
   if (!payload.supplierName || !payload.noteNo || !payload.noteDate || !payload.items?.length) throw new Error("Incomplete reviewed payload.");

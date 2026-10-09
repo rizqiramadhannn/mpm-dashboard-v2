@@ -33,6 +33,30 @@ test("cancelled manual note can be safely reopened as unpaid", () => fixture(asy
   assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_manual_note_reopened_unpaid'")).rows[0].n, 1);
 }));
 
+test("paid manual note can be reopened and its payment proof cleared", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload({ paidAmount: 4000000, paymentDate: "2026-09-16" }), actor);
+  const proof = { name: "wrong-proof.pdf", mimeType: "application/pdf", size: 4, base64: Buffer.from("test").toString("base64"), url: "", sha256: "proof-hash" };
+  await client.execute({ sql: "UPDATE supplier_notes SET payment_proof_file_name=?, payment_proof_file_mime_type=?, payment_proof_file_size=?, payment_proof_file_base64=?, payment_proof_file_sha256=?, payment_proof_files_json=? WHERE id=?", args: [proof.name, proof.mimeType, proof.size, proof.base64, proof.sha256, JSON.stringify([proof]), note.id] });
+  const before = (await client.execute({ sql: "SELECT invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  const result = await reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 4000000, expectedPaymentStatus: "LUNAS", clearPaymentProof: true }, "unknown");
+  assert.deepEqual([result.paidAmount, result.paymentStatus, result.paymentDate, result.paymentProofCount], [0, "BELUM BAYAR", null, 0]);
+  assert.equal((await reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 4000000, expectedPaymentStatus: "LUNAS", clearPaymentProof: true }, "unknown")).reused, true);
+  const after = (await client.execute({ sql: "SELECT paid_amount,remaining_payment,payment_status,payment_date,payment_proof_file_name,payment_proof_file_base64,payment_proof_files_json,invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  assert.deepEqual([after.paid_amount, after.remaining_payment, after.payment_status, after.payment_date, after.payment_proof_file_name, after.payment_proof_file_base64, JSON.parse(after.payment_proof_files_json).length, after.invoice_file_sha256], [0, 4000000, "BELUM BAYAR", null, "", "", 0, before.invoice_file_sha256]);
+}));
+
+test("paid manual note can retain its proof while correcting the payment date", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload({ paidAmount: 4000000, paymentDate: "2026-08-24" }), actor);
+  const bytes = Buffer.from("test");
+  const proof = { name: "proof.pdf", mimeType: "application/pdf", size: bytes.length, base64: bytes.toString("base64") };
+  await settleSupplierNote(db, note.id, { expectedNoteNo: note.noteNo, expectedAmount: 4000000, expectedPaidAmount: 4000000, paymentDate: "2026-08-24", paymentProofFiles: [proof] }, "unknown");
+  await reopenManualNoteAsUnpaid(db, note.id, { expectedAmount: 4000000, expectedPaidAmount: 4000000, expectedPaymentStatus: "LUNAS", clearPaymentProof: false }, "unknown");
+  const corrected = await settleSupplierNote(db, note.id, { expectedNoteNo: note.noteNo, expectedAmount: 4000000, expectedPaidAmount: 0, paymentDate: "2026-09-16", paymentProofFiles: [proof] }, "unknown");
+  assert.deepEqual([corrected.paidAmount, corrected.paymentStatus, corrected.paymentDate, corrected.paymentProofCount], [4000000, "LUNAS", "2026-09-16", 1]);
+  const row = (await client.execute({ sql: "SELECT paid_amount,payment_status,payment_date,payment_proof_files_json FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  assert.deepEqual([row.paid_amount, row.payment_status, row.payment_date, JSON.parse(row.payment_proof_files_json).length], [4000000, "LUNAS", "2026-09-16", 1]);
+}));
+
 test("manual correction protects reviewed state, replaces items and regenerates PDF", () => fixture(async ([db], client) => {
   const note = await createManualNote(db, payload(), actor);
   const before = (await client.execute({ sql: "SELECT note_no,note_date,invoice_file_sha256 FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
