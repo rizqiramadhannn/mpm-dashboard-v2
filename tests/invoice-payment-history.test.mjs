@@ -136,7 +136,7 @@ async function fixture(run) {
   const client = createClient({ url: `file:${join(directory, 'fixture.db').replaceAll('\\', '/')}` });
   try {
     const dialect = new SQLiteSyncDialect();
-    for (const table of [schema.invoiceDocuments, schema.appAdminAuditLogs]) {
+    for (const table of [schema.sphDocuments, schema.sphItems, schema.invoiceDocuments, schema.shipmentJourneys, schema.sphStatusHistory, schema.appAdminAuditLogs]) {
       const config = getTableConfig(table);
       const columns = config.columns.map(c => {
         let value = `"${c.name}" ${c.getSQLType()}${c.primary ? ' PRIMARY KEY' : ''}${c.notNull ? ' NOT NULL' : ''}`;
@@ -146,6 +146,8 @@ async function fixture(run) {
       await client.execute(`CREATE TABLE "${config.name}" (${columns.join(', ')})`);
     }
     const db = drizzle(client, { schema });
+    await db.insert(schema.sphDocuments).values({ id: 's1', sphNo: 'SPH1', yy: '26', mm: '09', sequence: 1, customerCode: 'CUS', customerName: 'Customer', sphDate: '2026-09-01', status: 'menunggu_po_konfirmasi' });
+    await db.insert(schema.sphItems).values({ id: 'item1', sphId: 's1', lineNo: 1, partName: 'Part', quantity: 1, unitPrice: 100, totalPrice: 100 });
     await db.insert(schema.invoiceDocuments).values({ id: 'i1', sphId: 's1', invoiceNo: 'INV1', invoiceDate: '2026-09-01', customerName: 'Customer', totalAmount: 100, status: 'pending' });
     await run(db, client);
   } finally {
@@ -165,6 +167,8 @@ test('invoice and receipt audits commit atomically, reject stale writes, and rec
   await persistInvoiceChange(db, await load(db), { paidAmount: 100 }, { expectedPaidAmount: 40, paymentKind: 'receipt', receivedDate: '2026-10-01' }, {}, actor, new Date('2026-10-02T03:00:00Z'));
   let state = await load(db);
   assert.equal(state.processedAt, '2026-10-01T00:00:00.000Z');
+  assert.equal((await db.select().from(schema.sphDocuments).where(eq(schema.sphDocuments.id, 's1')))[0].status, 'menunggu_pengiriman');
+  assert.equal((await db.select().from(schema.sphStatusHistory)).length, 1);
   let logs = await readInvoicePaymentAudits(db, ['i1']);
   assert.equal(logs.length, 2);
   assert.equal(report(state, logs).receivedInPeriod, 60);
@@ -182,6 +186,13 @@ test('invoice and receipt audits commit atomically, reject stale writes, and rec
   // An unchanged cumulative amount is not a legacy financial change.
   await persistInvoiceChange(db, state, { paidAmount: 90 }, {}, {}, actor, new Date('2026-10-04T04:00:00Z'));
   assert.equal(paymentHistoryState(await load(db), await readInvoicePaymentAudits(db, ['i1'])).valid, true);
+}));
+
+test('settlement keeps menunggu_po_konfirmasi when a shipment already exists', () => fixture(async db => {
+  await db.insert(schema.shipmentJourneys).values({ id: 'journey1', sphItemId: 'item1', batchNo: 1, quantity: 1 });
+  await persistInvoiceChange(db, await load(db), { paidAmount: 100 }, { expectedPaidAmount: 0, paymentKind: 'receipt', receivedDate: '2026-10-01' }, {}, actor, new Date('2026-10-02T03:00:00Z'));
+  assert.equal((await db.select().from(schema.sphDocuments).where(eq(schema.sphDocuments.id, 's1')))[0].status, 'menunggu_po_konfirmasi');
+  assert.equal((await db.select().from(schema.sphStatusHistory)).length, 0);
 }));
 
 test('audit failure rolls back the invoice amount; ambiguous/future payments cannot be saved', () => fixture(async (db, client) => {

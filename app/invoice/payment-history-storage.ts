@@ -1,7 +1,14 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { randomId } from "../../db/id";
-import { appAdminAuditLogs, invoiceDocuments } from "../../db/schema";
+import {
+  appAdminAuditLogs,
+  invoiceDocuments,
+  shipmentJourneys,
+  sphDocuments,
+  sphItems,
+  sphStatusHistory,
+} from "../../db/schema";
 import { isCalendarDate, paymentHistoryState, wibDate, type PaymentAudit, type PaymentEvent, type PaymentSnapshot } from "./payment-history";
 
 type Db = Awaited<ReturnType<typeof getDb>>;
@@ -23,7 +30,7 @@ export async function persistInvoiceChange(
   details: Record<string, unknown>, actor: { id: string | null; username: string; ipAddress: string }, now = new Date(),
 ) {
   return db.transaction(async tx => {
-    const [current] = await tx.select({ id: invoiceDocuments.id, invoiceDate: invoiceDocuments.invoiceDate,
+    const [current] = await tx.select({ id: invoiceDocuments.id, sphId: invoiceDocuments.sphId, invoiceDate: invoiceDocuments.invoiceDate,
       totalAmount: invoiceDocuments.totalAmount, paidAmount: invoiceDocuments.paidAmount, status: invoiceDocuments.status,
       processedAt: invoiceDocuments.processedAt, paymentProofFilesJson: invoiceDocuments.paymentProofFilesJson,
     }).from(invoiceDocuments).where(eq(invoiceDocuments.id, before.id)).limit(1);
@@ -80,13 +87,37 @@ export async function persistInvoiceChange(
       if (updates.status !== "done") updates.processedAt = null;
     }
     await tx.update(invoiceDocuments).set({ ...updates, updatedAt: now.toISOString() }).where(eq(invoiceDocuments.id, before.id));
+    let sphStatusAutoUpdated = false;
+    if (before.status !== "done" && updates.status === "done") {
+      const [sph] = await tx.select({ id: sphDocuments.id, sphNo: sphDocuments.sphNo, status: sphDocuments.status })
+        .from(sphDocuments).where(eq(sphDocuments.id, current.sphId)).limit(1);
+      if (sph?.status === "menunggu_po_konfirmasi") {
+        const [shipment] = await tx.select({ id: shipmentJourneys.id }).from(shipmentJourneys)
+          .innerJoin(sphItems, eq(shipmentJourneys.sphItemId, sphItems.id))
+          .where(eq(sphItems.sphId, sph.id)).limit(1);
+        if (!shipment) {
+          const updatedSph = await tx.update(sphDocuments)
+            .set({ status: "menunggu_pengiriman", updatedAt: now.toISOString() })
+            .where(and(eq(sphDocuments.id, sph.id), eq(sphDocuments.status, "menunggu_po_konfirmasi")))
+            .returning({ id: sphDocuments.id });
+          if (updatedSph.length > 0) {
+            await tx.insert(sphStatusHistory).values({
+              id: randomId(), sphId: sph.id, sphNo: sph.sphNo,
+              fromStatus: "menunggu_po_konfirmasi", toStatus: "menunggu_pengiriman", changedAt: now.toISOString(),
+            });
+            sphStatusAutoUpdated = true;
+          }
+        }
+      }
+    }
     await tx.insert(appAdminAuditLogs).values({
       id: randomId(), action: "invoice_updated", actorUserId: actor.id, actorUsername: actor.username,
       ipAddress: actor.ipAddress, createdAt: now.toISOString(),
       detailsJson: { ...details, invoiceId: before.id, paidAmount: updates.paidAmount,
         previousPaidAmount: updates.paidAmount !== undefined ? before.paidAmount : undefined,
         previousPaymentDate: updates.processedAt !== undefined ? before.processedAt : undefined,
-        paymentDate: updates.processedAt, status: updates.status, paymentHistory: event },
+        paymentDate: updates.processedAt, status: updates.status, paymentHistory: event,
+        sphStatusAutoUpdated: sphStatusAutoUpdated || undefined },
     });
     return { ...updates, paymentEvent: event?.paymentId ? { paymentId: event.paymentId, amount: event.amount, paymentDate: event.paymentDate } : undefined };
   });
