@@ -1,5 +1,7 @@
 const CANONICAL_NAME = "ANHAR MALIK / HAMZAH";
 const CANONICAL_KEY = "ANHAR MALIK HAMZAH";
+const VICKY_FADLI_NAME = "VICKY / FADLI";
+const VICKY_FADLI_KEY = "VICKY FADLI";
 
 function baseNormalize(name: string) {
   return name
@@ -12,11 +14,14 @@ function baseNormalize(name: string) {
 
 export function normalizeSupplierName(name: string) {
   const normalized = baseNormalize(name);
-  return normalized === "ANHAR MALIK" || normalized === "HAMZAH" || normalized === CANONICAL_KEY
-    ? CANONICAL_KEY
-    : normalized;
+  if (["ANHAR MALIK", "HAMZAH", CANONICAL_KEY].includes(normalized)) return CANONICAL_KEY;
+  if (["VICKY", "FADLI", VICKY_FADLI_KEY].includes(normalized)) return VICKY_FADLI_KEY;
+  return normalized;
 }
 
 export function canonicalSupplierName(name: string) {
-  return normalizeSupplierName(name) === CANONICAL_KEY ? CANONICAL_NAME : name.trim();
+  const normalized = normalizeSupplierName(name);
+  if (normalized === CANONICAL_KEY) return CANONICAL_NAME;
+  if (normalized === VICKY_FADLI_KEY) return VICKY_FADLI_NAME;
+  return name.trim();
 }

@@ -9,3 +9,10 @@ test("ANHAR MALIK and HAMZAH resolve to the same supplier identity", () => {
   }
   assert.equal(normalizeSupplierName("PT SANY HEAVY INDUSTRY INDONESIA"), "SANY HEAVY INDUSTRY INDONESIA");
 });
+
+test("VICKY and FADLI resolve to the same supplier identity", () => {
+  for (const alias of ["VICKY", "Fadli", "VICKY / FADLI"]) {
+    assert.equal(normalizeSupplierName(alias), "VICKY FADLI");
+    assert.equal(canonicalSupplierName(alias), "VICKY / FADLI");
+  }
+});
