@@ -7,6 +7,8 @@ import {
   updateSupplierNoteFiles,
   updateSupplierNotePaidAmount,
 } from "../../supplier/notes/data";
+import { getDb } from "../../../db";
+import { updateSupplierNotePaymentDeadline } from "../../supplier/nota-supplier/deadline-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +140,25 @@ export async function PATCH(request: Request) {
 
     if (!id) {
       return NextResponse.json({ error: "Nota tidak valid." }, { status: 400 });
+    }
+
+    if ("paymentDeadline" in payload) {
+      const allowedKeys = new Set(["id", "expectedNoteNo", "expectedPaymentDeadline", "paymentDeadline"]);
+      if (Object.keys(payload).some((key) => !allowedKeys.has(key))) {
+        return NextResponse.json(
+          { error: "Perubahan deadline tidak boleh digabung dengan operasi lain." },
+          { status: 400 }
+        );
+      }
+      const data = await updateSupplierNotePaymentDeadline(
+        await getDb(),
+        id,
+        payload,
+        request.headers.get("cf-connecting-ip") ??
+          request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+          "unknown"
+      );
+      return NextResponse.json({ data });
     }
 
     const hasCorrection = "amount" in payload || "items" in payload;

@@ -15,6 +15,7 @@ import { createApiSupplier } from "../app/supplier/nota-manual/supplier-storage.
 import { reopenManualNoteAsUnpaid, settleManualNote } from "../app/supplier/nota-manual/payment-storage.ts";
 import { correctManualNote } from "../app/supplier/nota-manual/correction-storage.ts";
 import { settleSupplierNote } from "../app/supplier/nota-supplier/payment-storage.ts";
+import { updateSupplierNotePaymentDeadline } from "../app/supplier/nota-supplier/deadline-storage.ts";
 import { cancelSupplierNote } from "../app/supplier/notes/data.ts";
 
 const actor = { id: "user-1", username: "tester", ipAddress: "127.0.0.1" };
@@ -55,6 +56,18 @@ test("paid manual note can retain its proof while correcting the payment date", 
   assert.deepEqual([corrected.paidAmount, corrected.paymentStatus, corrected.paymentDate, corrected.paymentProofCount], [4000000, "LUNAS", "2026-09-16", 1]);
   const row = (await client.execute({ sql: "SELECT paid_amount,payment_status,payment_date,payment_proof_files_json FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
   assert.deepEqual([row.paid_amount, row.payment_status, row.payment_date, JSON.parse(row.payment_proof_files_json).length], [4000000, "LUNAS", "2026-09-16", 1]);
+}));
+
+test("supplier note deadline update is guarded, audited and idempotent", () => fixture(async ([db], client) => {
+  const note = await createManualNote(db, payload(), actor);
+  await assert.rejects(updateSupplierNotePaymentDeadline(db, note.id, { expectedNoteNo: "wrong", expectedPaymentDeadline: null, paymentDeadline: "2026-10-05" }, "unknown"), /Nomor nota berubah/);
+  await assert.rejects(updateSupplierNotePaymentDeadline(db, note.id, { expectedNoteNo: note.noteNo, expectedPaymentDeadline: "2026-10-01", paymentDeadline: "2026-10-05" }, "unknown"), /Deadline berubah/);
+  const result = await updateSupplierNotePaymentDeadline(db, note.id, { expectedNoteNo: note.noteNo, expectedPaymentDeadline: null, paymentDeadline: "2026-10-05" }, "unknown");
+  assert.deepEqual([result.paymentDeadline, result.reused], ["2026-10-05", false]);
+  assert.equal((await updateSupplierNotePaymentDeadline(db, note.id, { expectedNoteNo: note.noteNo, expectedPaymentDeadline: null, paymentDeadline: "2026-10-05" }, "unknown")).reused, true);
+  const row = (await client.execute({ sql: "SELECT note_no,note_date,amount,paid_amount,payment_deadline FROM supplier_notes WHERE id=?", args: [note.id] })).rows[0];
+  assert.deepEqual([row.note_no, row.note_date, row.amount, row.paid_amount, row.payment_deadline], [note.noteNo, "2026-09-12", 4000000, 0, "2026-10-05"]);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM app_admin_audit_logs WHERE action='supplier_note_payment_deadline_updated'")).rows[0].n, 1);
 }));
 
 test("manual correction protects reviewed state, replaces items and regenerates PDF", () => fixture(async ([db], client) => {
