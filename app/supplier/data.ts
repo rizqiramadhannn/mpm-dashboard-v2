@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "../../db";
 import { suppliers } from "../../db/schema";
+import { canonicalSupplierName, normalizeSupplierName } from "./identity";
 import { recordActivityLog, requireUser } from "../auth";
 
 const seededSuppliers = [
@@ -301,17 +302,8 @@ function parseId(formData: FormData) {
   return id.trim();
 }
 
-function normalizeSupplierName(name: string) {
-  return name
-    .toUpperCase()
-    .replace(/\b(PT|CV|UD|TBK|PERSERO)\b/g, "")
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function supplierValuesFromForm(formData: FormData) {
-  const name = requiredString(formData, "name");
+  const name = canonicalSupplierName(requiredString(formData, "name"));
 
   return {
     name,

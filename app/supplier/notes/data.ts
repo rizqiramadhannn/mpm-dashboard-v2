@@ -8,6 +8,8 @@ import {
   suppliers,
 } from "../../../db/schema";
 import { correctManualNote } from "../nota-manual/correction-storage";
+import { canonicalSupplierName, normalizeSupplierName } from "../identity";
+export { normalizeSupplierName } from "../identity";
 
 type SupplierNoteFileInput = {
   name?: unknown;
@@ -124,15 +126,6 @@ function normalizeDate(value: unknown) {
     timeZone: "Asia/Jakarta",
     year: "numeric",
   }).format(new Date());
-}
-
-export function normalizeSupplierName(name: string) {
-  return name
-    .toUpperCase()
-    .replace(/\b(PT|CV|UD|TBK|PERSERO)\b/g, "")
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function normalizeBase64(value: unknown) {
@@ -349,7 +342,7 @@ export async function createSupplierNote(payload: SupplierNotePayload) {
     const [createdSupplier] = await db
       .insert(suppliers)
       .values({
-        name: supplierName,
+        name: canonicalSupplierName(supplierName),
         normalizedName,
       })
       .returning({ id: suppliers.id, name: suppliers.name });

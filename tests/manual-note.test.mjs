@@ -137,6 +137,15 @@ test("API supplier creation reuses normalized names and records one audit", () =
   await assert.rejects(createApiSupplier(db, { name: "" }, "unknown"), /Nama supplier/);
 }));
 
+test("API supplier creation combines ANHAR MALIK and HAMZAH aliases", () => fixture(async ([db], client) => {
+  const first = await createApiSupplier(db, { name: "ANHAR MALIK" }, "unknown");
+  const second = await createApiSupplier(db, { name: "HAMZAH" }, "unknown");
+  assert.equal(first.id, second.id);
+  assert.equal(first.name, "ANHAR MALIK / HAMZAH");
+  assert.equal(second.reused, true);
+  assert.equal((await client.execute("SELECT count(*) AS n FROM suppliers WHERE normalized_name='ANHAR MALIK HAMZAH'")).rows[0].n, 1);
+}));
+
 test("explicit Pcs can replay a legacy manual request hash", () => fixture(async ([db], client) => {
   const input = payload();
   const data = validateManualNote(input);
